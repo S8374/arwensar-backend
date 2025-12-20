@@ -1,0 +1,98 @@
+// src/modules/assessment/assessment.route.ts
+import express from "express";
+import { AssessmentController } from "./assessment.controller";
+import {
+  startAssessmentSchema,
+  saveAnswerSchema,
+  submitAssessmentSchema,
+  reviewAssessmentSchema,
+  reviewEvidenceSchema
+} from "./assessment.constant";
+import auth from "../../middlewares/auth";
+import validateRequest from "../../middlewares/validateRequest";
+
+const router = express.Router();
+
+// Get assessments
+router.get(
+  "/",
+  auth("ADMIN", "VENDOR", "SUPPLIER"),
+  AssessmentController.getAssessments
+);
+
+// Get assessment by ID
+router.get(
+  "/:assessmentId",
+  auth("ADMIN", "VENDOR", "SUPPLIER"),
+  AssessmentController.getAssessmentById
+);
+
+// Get submissions
+router.get(
+  "/submissions",
+  auth("ADMIN", "VENDOR", "SUPPLIER"),
+  AssessmentController.getSubmissions
+);
+
+// Get submission by ID
+router.get(
+  "/submissions/:submissionId",
+  auth("ADMIN", "VENDOR", "SUPPLIER"),
+  AssessmentController.getSubmissionById
+);
+
+// Start assessment
+router.post(
+  "/start",
+  auth("SUPPLIER"),
+  validateRequest(startAssessmentSchema),
+  AssessmentController.startAssessment
+);
+
+// Save answer
+router.post(
+  "/submissions/:submissionId/answers/:questionId",
+  auth("SUPPLIER"),
+  validateRequest(saveAnswerSchema),
+  AssessmentController.saveAnswer
+);
+
+// Submit assessment
+router.post(
+  "/submissions/:submissionId/submit",
+  auth("SUPPLIER"),
+  validateRequest(submitAssessmentSchema),
+  AssessmentController.submitAssessment
+);
+
+// Review assessment
+router.post(
+  "/submissions/:submissionId/review",
+  auth("VENDOR", "ADMIN"),
+  validateRequest(reviewAssessmentSchema),
+  AssessmentController.reviewAssessment
+);
+
+// Review evidence
+router.post(
+  "/evidence/:answerId/review",
+  auth("VENDOR", "ADMIN"),
+  validateRequest(reviewEvidenceSchema),
+  AssessmentController.reviewEvidence
+);
+
+// Request evidence
+router.post(
+  "/evidence/:answerId/request",
+  auth("VENDOR", "ADMIN"),
+  AssessmentController.requestEvidence
+);
+
+// Get assessment statistics
+router.get(
+  "/statistics",
+  auth("ADMIN", "VENDOR", "SUPPLIER"),
+  AssessmentController.getAssessmentStatistics
+);
+
+export const AssessmentRoutes = router;
