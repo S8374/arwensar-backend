@@ -49,5 +49,12 @@ router.post(
   auth("SUPPLIER"),
   SupplierController.submitAssessment
 );
-
+router.get(
+  "/verify-invitation/:token",
+  SupplierController.verifyInvitation
+);
+router.post(
+  "/complete-registration",
+  SupplierController.completeSupplierRegistration
+);
 export const SupplierRoutes = router;

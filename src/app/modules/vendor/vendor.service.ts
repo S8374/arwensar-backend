@@ -4,7 +4,6 @@ import { prisma } from "../../shared/prisma";
 import httpStatus from "http-status";
 import ApiError from "../../../error/ApiError";
 import { calculateBIVScore } from "../../../logic/bivRiskCalculator";
-import { SubscriptionService } from "../subscription/subscription.service";
 
 export interface VendorDashboardStats {
   totalSuppliers: number;
@@ -562,124 +561,10 @@ async getVendorProfile(vendorId: string): Promise<any> {
   ) {
     const fileSizeMB = file.size / (1024 * 1024); // Convert bytes to MB
 
-    // Check storage limit
-    const limitCheck = await SubscriptionService.canUploadDocument(vendorId, fileSizeMB);
-    if (!limitCheck.allowed) {
-      throw new ApiError(httpStatus.PAYMENT_REQUIRED, limitCheck.reason || "Cannot upload file due to storage limits");
-    }
+  
 
     // Rest of the uploadDocument implementation...
     // [Your existing uploadDocument code]
   },
- // ========== GET PLAN UPGRADE OPTIONS ==========
-  async getUpgradeOptions(vendorId: string): Promise<any[]> {
-    const currentSubscription = await prisma.subscription.findFirst({
-      where: {
-        user: {
-          vendorProfile: {
-            id: vendorId
-          }
-        }
-      },
-      include: { plan: true }
-    });
 
-    const allPlans = await prisma.plan.findMany({
-      where: {
-        isActive: true,
-        isDeleted: false,
-        type: { not: 'FREE' } // Don't show free plan as upgrade option
-      },
-      orderBy: { price: 'asc' }
-    });
-
-    const usage = await SubscriptionService.getUsageStatistics(vendorId);
-
-    return allPlans.map(plan => ({
-      id: plan.id,
-      name: plan.name,
-      description: plan.description,
-      price: plan.price.toNumber(),
-      currency: plan.currency,
-      billingCycle: plan.billingCycle,
-      features: plan.features,
-      limits: {
-        suppliers: plan.supplierLimit,
-        assessments: plan.assessmentLimit,
-        storage: plan.storageLimit,
-        users: plan.userLimit
-      },
-      isCurrentPlan: currentSubscription?.planId === plan.id,
-      canUpgrade: !currentSubscription || 
-        (currentSubscription.plan.price.toNumber() < plan.price.toNumber()),
-      usageComparison: {
-        suppliers: {
-          current: usage.suppliers,
-          limit: plan.supplierLimit,
-          percentage: (usage.suppliers / plan.supplierLimit) * 100
-        },
-        assessments: {
-          current: usage.assessments,
-          limit: plan.assessmentLimit || Infinity,
-          percentage: plan.assessmentLimit 
-            ? (usage.assessments / plan.assessmentLimit) * 100
-            : 0
-        },
-        storage: {
-          current: usage.storage,
-          limit: plan.storageLimit || Infinity,
-          percentage: plan.storageLimit 
-            ? (usage.storage / plan.storageLimit) * 100
-            : 0
-        }
-      }
-    }));
-  },
-   // ========== CHECK IF VENDOR CAN PERFORM ACTION ==========
-  async canPerformAction(
-    vendorId: string,
-    action: 'ADD_SUPPLIER' | 'CREATE_ASSESSMENT' | 'UPLOAD_DOCUMENT',
-    data?: any
-  ): Promise<{
-    allowed: boolean;
-    reason?: string;
-    limits?: any;
-    usage?: any;
-    upgradeOptions?: any[];
-  }> {
-    try {
-      await SubscriptionService.enforcePlanLimits(vendorId, action, data);
-      
-      const subscription = await prisma.subscription.findFirst({
-        where: {
-          user: {
-            vendorProfile: {
-              id: vendorId
-            }
-          }
-        },
-        include: { plan: true }
-      });
-
-      const usage = await SubscriptionService.getUsageStatistics(vendorId);
-      const upgradeOptions = await this.getUpgradeOptions(vendorId);
-
-      return {
-        allowed: true,
-        limits: subscription?.plan,
-        usage,
-        upgradeOptions: subscription?.plan.type === 'FREE' ? upgradeOptions : undefined
-      };
-    } catch (error: any) {
-      if (error.statusCode === httpStatus.PAYMENT_REQUIRED) {
-        const upgradeOptions = await this.getUpgradeOptions(vendorId);
-        return {
-          allowed: false,
-          reason: error.message,
-          upgradeOptions
-        };
-      }
-      throw error;
-    }
-  }
 };

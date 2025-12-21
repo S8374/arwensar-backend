@@ -4,7 +4,6 @@ import { VendorController } from "./vendor.controller";
 import { updateVendorProfileSchema } from "./vendor.constant";
 import auth from "../../middlewares/auth";
 import validateRequest from "../../middlewares/validateRequest";
-import { SupplierController } from "../supplier/supplier.controller";
 
 const router = express.Router();
 

@@ -74,7 +74,7 @@ export const config = {
   },
   
   OTP: {
-    EXPIRATION: 300, // 5 minutes in seconds
+    EXPIRATION: 60, // 5 minutes in seconds
     LENGTH: 6
   },
 

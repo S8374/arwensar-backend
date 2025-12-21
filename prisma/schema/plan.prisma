@@ -67,7 +67,6 @@ model Subscription {
   updatedAt DateTime @updatedAt @map("updated_at")
 
   payments Payment[]
-  invoices Invoice[]
 
   @@index([userId])
   @@index([status])
@@ -104,10 +103,6 @@ model Payment {
 
   receiptUrl String? @map("receipt_url")
 
-  // Foreign key on Payment side with named relation
-  invoiceId String?  @unique
-  invoice   Invoice? @relation("PaymentInvoice", fields: [invoiceId], references: [id])
-
   paidAt     DateTime? @map("paid_at")
   refundedAt DateTime? @map("refunded_at")
   createdAt  DateTime  @default(now()) @map("created_at")
@@ -124,36 +119,3 @@ model Payment {
   @@map("payments")
 }
 
-model Invoice {
-  id             String       @id @default(uuid())
-  subscriptionId String
-  subscription   Subscription @relation(fields: [subscriptionId], references: [id])
-
-  invoiceNumber String        @unique @map("invoice_number")
-  amount        Decimal       @db.Decimal(10, 2)
-  currency      String        @default("EUR")
-  status        PaymentStatus @default(PENDING)
-
-  periodStart DateTime? @map("period_start")
-  periodEnd   DateTime? @map("period_end")
-  dueDate     DateTime? @map("due_date")
-
-  stripeInvoiceId  String? @unique @map("stripe_invoice_id")
-  pdfUrl           String? @map("pdf_url")
-  hostedInvoiceUrl String? @map("hosted_invoice_url")
-
-  // Named relation to match Payment.invoice relation
-  payment Payment? @relation("PaymentInvoice")
-
-  paidAt    DateTime? @map("paid_at")
-  createdAt DateTime  @default(now()) @map("created_at")
-  updatedAt DateTime  @updatedAt @map("updated_at")
-
-  items Json?
-
-  @@index([invoiceNumber])
-  @@index([subscriptionId])
-  @@index([status])
-  @@index([dueDate])
-  @@map("invoices")
-}

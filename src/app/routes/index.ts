@@ -9,8 +9,8 @@ import { AssessmentRoutes } from '../modules/assessment/assessment.route';
 import { NotificationRoutes } from '../modules/notification/notification.route';
 import { ReportRoutes } from '../modules/report/report.route';
 import { ProblemRoutes } from '../modules/problem/problem.route';
-import { PaymentRoutes } from '../modules/payment/payment.route';
-import { SubscriptionRoutes } from '../modules/subscription/subscription.route';
+import { paymentRoutes } from '../modules/payment/payment.routes';
+import { WebhookRoutes } from '../modules/webhook/webhook.routes';
 
 const router = express.Router();
 
@@ -23,9 +23,10 @@ const moduleRoutes = [
   { path: '/assessments', route: AssessmentRoutes },
   { path: '/notifications', route: NotificationRoutes },
   { path: '/reports', route: ReportRoutes },
-  { path: '/payment', route: PaymentRoutes },
-  { path: '/subscription', route: SubscriptionRoutes },
-  { path: '/problems', route: ProblemRoutes }
+  { path: '/payment', route: paymentRoutes },
+  { path: '/problems', route: ProblemRoutes },
+    { path: '/webhook', route: WebhookRoutes } // Webhook routes should be last
+
 ];
 
 moduleRoutes.forEach(route => router.use(route.path, route.route));

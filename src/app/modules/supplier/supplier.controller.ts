@@ -153,6 +153,31 @@ const submitAssessment = catchAsync(async (req: Request, res: Response) => {
     data: result
   });
 });
+const verifyInvitation = catchAsync(async (req: Request, res: Response) => {
+  const { token } = req.params;
+  
+  const result = await SupplierService.verifyInvitationToken(token);
+  
+  sendResponse(res, {
+    statusCode: httpStatus.OK,
+    success: true,
+    message: "Invitation verified successfully",
+    data: result
+  });
+});
+
+
+const completeSupplierRegistration = catchAsync(async (req, res) => {
+  const result = await SupplierService.completeSupplierRegistration(req.body);
+
+  sendResponse(res, {
+    statusCode: httpStatus.OK,
+    success: true,
+    message: "Supplier registration completed successfully",
+    data: result
+  });
+});
+
 
 export const SupplierController = {
   getDashboardStats,
@@ -161,5 +186,7 @@ export const SupplierController = {
   getAssessments,
   startAssessment,
   saveAnswer,
-  submitAssessment
+  submitAssessment,
+  verifyInvitation,
+  completeSupplierRegistration
 };

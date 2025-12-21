@@ -535,71 +535,88 @@ export const AuthService = {
 
   // ========== LOGOUT ==========
   async logout(userId: string): Promise<{ message: string }> {
-    await prisma.activityLog.create({
-      data: {
-        userId,
-        action: "LOGOUT",
-        entityType: "USER",
-        entityId: userId
+    try {
+      // First, check if the user exists
+      const userExists = await prisma.user.findUnique({
+        where: { id: userId },
+        select: { id: true }
+      });
+
+      // Only create activity log if user exists
+      if (userExists) {
+        await prisma.activityLog.create({
+          data: {
+            userId,
+            action: "LOGOUT",
+            entityType: "USER",
+            entityId: userId
+          }
+        });
+      }
+
+      return {
+        message: "Logged out successfully"
+      };
+    } catch (error) {
+      // Log the error but still return success for logout
+      console.error("Error creating activity log during logout:", error);
+      return {
+        message: "Logged out successfully"
+      };
+    }
+  },
+
+  // ========== GET CURRENT USER (ME) ==========
+  async getMe(userId: string): Promise<any> {
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      include: {
+        vendorProfile: {
+          include: {
+            // Vendors don't have direct subscription relationship
+            // Subscription is linked to User, not Vendor
+            suppliers: {
+              where: { isDeleted: false },
+              select: {
+                id: true,
+                name: true,
+                email: true,
+                riskLevel: true,
+                bivScore: true
+              },
+              take: 5
+            }
+          }
+        },
+        supplierProfile: {
+          include: {
+            vendor: {
+              select: {
+                id: true,
+                companyName: true
+              }
+            }
+          }
+        },
+        // Subscription is on User model, not Vendor
+        subscription: {
+          include: {
+            plan: true
+          }
+        },
+        notificationPreferences: true
       }
     });
 
-    return {
-      message: "Logged out successfully"
-    };
-  },
-
-// ========== GET CURRENT USER (ME) ==========
-async getMe(userId: string): Promise<any> {
-  const user = await prisma.user.findUnique({
-    where: { id: userId },
-    include: {
-      vendorProfile: {
-        include: {
-          // Vendors don't have direct subscription relationship
-          // Subscription is linked to User, not Vendor
-          suppliers: {
-            where: { isDeleted: false },
-            select: {
-              id: true,
-              name: true,
-              email: true,
-              riskLevel: true,
-              bivScore: true
-            },
-            take: 5
-          }
-        }
-      },
-      supplierProfile: {
-        include: {
-          vendor: {
-            select: {
-              id: true,
-              companyName: true
-            }
-          }
-        }
-      },
-      // Subscription is on User model, not Vendor
-      subscription: {
-        include: {
-          plan: true
-        }
-      },
-      notificationPreferences: true
+    if (!user) {
+      throw new ApiError(httpStatus.NOT_FOUND, "User not found");
     }
-  });
 
-  if (!user) {
-    throw new ApiError(httpStatus.NOT_FOUND, "User not found");
-  }
+    // Remove sensitive data
+    const { password, ...userWithoutPassword } = user;
 
-  // Remove sensitive data
-  const { password, ...userWithoutPassword } = user;
-
-  return userWithoutPassword;
-},
+    return userWithoutPassword;
+  },
 
 
 };

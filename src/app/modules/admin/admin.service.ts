@@ -313,68 +313,80 @@ export const AdminService = {
   },
 
   // ========== ASSESSMENTS MANAGEMENT ==========
-  async createAssessment(data: any): Promise<Assessment> {
-    // Check if assessment with same examId exists
-    const existingAssessment = await prisma.assessment.findUnique({
-      where: { examId: data.examId }
-    });
+// src/modules/admin/admin.service.ts - Updated createAssessment method
+async createAssessment(data: any): Promise<Assessment> {
+  // Check if assessment with same examId exists
+  const existingAssessment = await prisma.assessment.findUnique({
+    where: { examId: data.examId }
+  });
 
-    if (existingAssessment) {
-      throw new ApiError(httpStatus.CONFLICT, "Assessment with this exam ID already exists");
-    }
+  if (existingAssessment) {
+    throw new ApiError(httpStatus.CONFLICT, "Assessment with this exam ID already exists");
+  }
 
-    const assessment = await prisma.assessment.create({
-      data: {
-        examId: data.examId,
-        title: data.title,
-        description: data.description,
-        isActive: data.isActive !== undefined ? data.isActive : true,
-        isTemplate: data.isTemplate || false,
-        stage: data.stage || 'FULL',
-        totalPoints: data.totalPoints || 100,
-        passingScore: data.passingScore,
-        timeLimit: data.timeLimit,
-        createdBy: data.createdBy,
-        vendorId: data.vendorId || null,
-        categories: {
-          create: data.categories.map((category: any) => ({
-            categoryId: category.categoryId,
-            title: category.title,
-            description: category.description,
-            order: category.order || 1,
-            weight: category.weight,
-            maxScore: category.maxScore || 100,
-            questions: {
-              create: category.questions.map((question: any) => ({
-                questionId: question.questionId,
-                question: question.question,
-                description: question.description,
-                order: question.order || 1,
-                isDocument: question.isDocument || false,
-                isInputField: question.isInputField || false,
-                answerType: question.answerType || 'YES',
-                required: question.required !== undefined ? question.required : true,
-                weight: question.weight,
-                maxScore: question.maxScore || 10,
-                helpText: question.helpText,
-                bivCategory: question.bivCategory,
-                evidenceRequired: question.evidenceRequired || false
-              }))
-            }
+  // Validate that createdBy user exists
+  const user = await prisma.user.findUnique({
+    where: { id: data.createdBy }
+  });
+
+  if (!user) {
+    throw new ApiError(httpStatus.NOT_FOUND, "User not found");
+  }
+
+ if (!data.vendorId) {
+  throw new ApiError(httpStatus.BAD_REQUEST, "vendorId is required");
+}
+
+const assessment = await prisma.assessment.create({
+  data: {
+    examId: data.examId,
+    title: data.title,
+    description: data.description,
+    isActive: data.isActive !== undefined ? data.isActive : true,
+    isTemplate: data.isTemplate || false,
+    stage: data.stage || 'FULL',
+    totalPoints: data.totalPoints || 100,
+    passingScore: data.passingScore,
+    timeLimit: data.timeLimit,
+    createdByUser: { connect: { id: data.createdBy } },
+    vendorId: data.vendorId, // ✅ required
+    categories: {
+      create: data.categories.map((category: any) => ({
+        categoryId: category.categoryId,
+        title: category.title,
+        description: category.description,
+        order: category.order || 1,
+        weight: category.weight,
+        maxScore: category.maxScore || 100,
+        questions: {
+          create: category.questions.map((question: any) => ({
+            questionId: question.questionId,
+            question: question.question,
+            description: question.description,
+            order: question.order || 1,
+            isDocument: question.isDocument || false,
+            isInputField: question.isInputField || false,
+            answerType: question.answerType || 'YES',
+            required: question.required !== undefined ? question.required : true,
+            weight: question.weight,
+            maxScore: question.maxScore || 10,
+            helpText: question.helpText,
+            bivCategory: question.bivCategory,
+            evidenceRequired: question.evidenceRequired || false
           }))
         }
-      },
-      include: {
-        categories: {
-          include: {
-            questions: true
-          }
-        }
-      }
-    });
-
-    return assessment;
+      }))
+    }
   },
+  include: {
+    categories: { include: { questions: true } },
+    createdByUser: { select: { id: true, email: true, role: true } }
+  }
+});
+
+
+  return assessment;
+},
 
   async updateAssessment(assessmentId: string, data: any): Promise<Assessment> {
     const assessment = await prisma.assessment.findUnique({

@@ -31,9 +31,10 @@ export const loginSchema = z.object({
 export const verifyEmailSchema = z.object({
   body: z.object({
     email: z.string().email("Valid email is required"),
-    otp: z.string().length(6, "OTP must be 6 digits")
-  })
+    otp: z.string().length(6, "OTP must be 6 digits"),
+  }),
 });
+
 
 export const resendOTPSchema = z.object({
   body: z.object({

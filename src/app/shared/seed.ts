@@ -289,11 +289,11 @@ async function seedDatabase() {
         }
       });
 
-      console.log('✅ Admin user created:', admin.email);
+     // console.log('✅ Admin user created:', admin.email);
     }
 
     // 2. Create Free Trial Plan (No Stripe product needed)
-    console.log('\n🆓 Creating Free Trial plan...');
+   // console.log('\n🆓 Creating Free Trial plan...');
     const existingFreePlan = await prisma.plan.findFirst({
       where: { 
         type: 'FREE',
@@ -322,7 +322,7 @@ async function seedDatabase() {
           isPopular: FREE_TRIAL_PLAN.isPopular
         }
       });
-      console.log('📝 Free Trial plan updated');
+     // console.log('📝 Free Trial plan updated');
     } else {
       await prisma.plan.create({
         data: {
@@ -343,11 +343,11 @@ async function seedDatabase() {
           isPopular: FREE_TRIAL_PLAN.isPopular
         }
       });
-      console.log('✅ Free Trial plan created');
+     // console.log('✅ Free Trial plan created');
     }
 
     // 3. Create Monthly Plans with Stripe Integration
-    console.log('\n💰 Creating Monthly plans with Stripe...');
+   // console.log('\n💰 Creating Monthly plans with Stripe...');
     for (const planData of PRICING_PLANS.MONTHLY) {
       const existingPlan = await prisma.plan.findFirst({
         where: { 
@@ -388,17 +388,17 @@ async function seedDatabase() {
           where: { id: existingPlan.id },
           data: dbPlanData
         });
-        console.log(`📝 Monthly plan updated: ${planData.name}`);
+       // console.log(`📝 Monthly plan updated: ${planData.name}`);
       } else {
         await prisma.plan.create({
           data: dbPlanData
         });
-        console.log(`✅ Monthly plan created: ${planData.name}`);
+       // console.log(`✅ Monthly plan created: ${planData.name}`);
       }
     }
 
     // 4. Create Annual Plans with Stripe Integration
-    console.log('\n📅 Creating Annual plans with Stripe...');
+  //  console.log('\n📅 Creating Annual plans with Stripe...');
     for (const planData of PRICING_PLANS.ANNUAL) {
       const existingPlan = await prisma.plan.findFirst({
         where: { 
@@ -439,22 +439,22 @@ async function seedDatabase() {
           where: { id: existingPlan.id },
           data: dbPlanData
         });
-        console.log(`📝 Annual plan updated: ${planData.name}`);
+       // console.log(`📝 Annual plan updated: ${planData.name}`);
       } else {
         await prisma.plan.create({
           data: dbPlanData
         });
-        console.log(`✅ Annual plan created: ${planData.name}`);
+       // console.log(`✅ Annual plan created: ${planData.name}`);
       }
     }
 
     // 5. Verify all plans are created
-    console.log('\n🔍 Verifying all plans...');
+    //console.log('\n🔍 Verifying all plans...');
     const allPlans = await prisma.plan.findMany({
       where: { isDeleted: false }
     });
 
-    console.log(`📊 Total plans in database: ${allPlans.length}`);
+   // console.log(`📊 Total plans in database: ${allPlans.length}`);
     
     allPlans.forEach(plan => {
       console.log(`  - ${plan.name} (${plan.billingCycle}): ${plan.price} EUR`);
@@ -463,13 +463,13 @@ async function seedDatabase() {
       }
     });
 
-    console.log('\n🎉 Database seeding completed successfully!');
-    console.log('✅ Admin user created/verified');
-    console.log('✅ Free Trial plan created');
-    console.log('✅ Monthly plans created with Stripe integration');
-    console.log('✅ Annual plans created with Stripe integration');
-    console.log('\n🔗 Stripe products and prices have been created');
-    console.log('💳 Plans are ready for subscription management');
+   // console.log('\n🎉 Database seeding completed successfully!');
+   // console.log('✅ Admin user created/verified');
+   // console.log('✅ Free Trial plan created');
+   // console.log('✅ Monthly plans created with Stripe integration');
+  //  console.log('✅ Annual plans created with Stripe integration');
+   //// console.log('\n🔗 Stripe products and prices have been created');
+   // console.log('💳 Plans are ready for subscription management');
 
   } catch (error) {
     console.error('❌ Seeding error:', error);

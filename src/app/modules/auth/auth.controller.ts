@@ -132,9 +132,16 @@ const resetPassword = catchAsync(async (req: Request, res: Response) => {
 });
 
 const logout = catchAsync(async (req: Request, res: Response) => {
-  const result = await AuthService.logout(req.user?.userId || "");
+  const userId = req.user?.userId;
   
-  // Clear cookies
+  let result;
+  if (userId) {
+    result = await AuthService.logout(userId);
+  } else {
+    result = { message: "Logged out successfully" };
+  }
+
+  // Clear cookies regardless of user existence
   res.clearCookie("accessToken");
   res.clearCookie("refreshToken");
   

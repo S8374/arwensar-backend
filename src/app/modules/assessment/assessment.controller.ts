@@ -52,8 +52,9 @@ const getAssessmentById = catchAsync(async (req: Request, res: Response) => {
 });
 
 const getSubmissions = catchAsync(async (req: Request, res: Response) => {
+  console.log("Getting submissions" ,  req);
   const userId = req.user?.userId;
-  
+   
   if (!userId) {
     return sendResponse(res, {
       statusCode: httpStatus.UNAUTHORIZED,
@@ -63,8 +64,8 @@ const getSubmissions = catchAsync(async (req: Request, res: Response) => {
     });
   }
 
-  const result = await AssessmentService.getSubmissions(userId, req.query);
-  
+  const result = await AssessmentService.getSubmissions(userId, req.query); // ✅ Correct
+
   sendResponse(res, {
     statusCode: httpStatus.OK,
     success: true,

@@ -1,6 +1,3 @@
-// ============================================
-// PROBLEM MANAGEMENT MODELS
-// ============================================
 
 model Problem {
   id                String          @id @default(uuid())
