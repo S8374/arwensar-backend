@@ -50,6 +50,9 @@ const updateUserProfile = catchAsync(async (req: Request, res: Response) => {
 });
 
 const updatePassword = catchAsync(async (req: Request, res: Response) => {
+
+  console.log("Request Body:", req.body);
+  console.log("User Info:", req.user);
   const userId = req.user?.userId;
   
   if (!userId) {
@@ -94,6 +97,8 @@ const getNotificationPreferences = catchAsync(async (req: Request, res: Response
 });
 
 const updateNotificationPreferences = catchAsync(async (req: Request, res: Response) => {
+  console.log("Request Body:", req.body);
+  console.log("User Info:", req.user);
   const userId = req.user?.userId;
   
   if (!userId) {

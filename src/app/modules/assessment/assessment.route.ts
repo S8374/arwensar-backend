@@ -29,7 +29,7 @@ router.get(
 
 // Get submissions
 router.get(
-  "/submissions",
+  "/submissions/all",
   auth("ADMIN", "VENDOR", "SUPPLIER"),
   AssessmentController.getSubmissions
 );
@@ -53,7 +53,6 @@ router.post(
 router.post(
   "/submissions/:submissionId/answers/:questionId",
   auth("SUPPLIER"),
-  validateRequest(saveAnswerSchema),
   AssessmentController.saveAnswer
 );
 
@@ -61,7 +60,6 @@ router.post(
 router.post(
   "/submissions/:submissionId/submit",
   auth("SUPPLIER"),
-  validateRequest(submitAssessmentSchema),
   AssessmentController.submitAssessment
 );
 
@@ -90,9 +88,24 @@ router.post(
 
 // Get assessment statistics
 router.get(
-  "/statistics",
+  "/statistics/all",
   auth("ADMIN", "VENDOR", "SUPPLIER"),
   AssessmentController.getAssessmentStatistics
 );
+// src/modules/assessment/assessment.route.ts
+
+router.get(
+  "/submissions/drafts/:submissionId",
+  auth("ADMIN", "VENDOR", "SUPPLIER"),
+  AssessmentController.getDraftSubmissionById
+);
+// src/modules/assessment/assessment.route.ts (add this route)
+router.delete(
+  "/evidence/:answerId",
+  auth("ADMIN", "VENDOR", "SUPPLIER"),
+  AssessmentController.removeEvidence
+);
+
+
 
 export const AssessmentRoutes = router;

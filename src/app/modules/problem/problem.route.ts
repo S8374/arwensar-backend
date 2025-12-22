@@ -15,7 +15,7 @@ const router = express.Router();
 router.post(
   "/",
   auth("ADMIN", "VENDOR", "SUPPLIER"),
-  validateRequest(createProblemSchema),
+
   ProblemController.createProblem
 );
 

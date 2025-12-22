@@ -68,7 +68,6 @@ model AssessmentQuestion {
   isDocument   Boolean    @default(false) @map("is_document")
   isInputField Boolean    @default(false) @map("is_input_field")
   answerType   AnswerType @default(YES) @map("answer_type")
-  required     Boolean    @default(true)
   weight       Decimal?   @default(100) @db.Decimal(5, 2)
   maxScore     Int        @default(10) @map("max_score")
   helpText     String?    @map("help_text")

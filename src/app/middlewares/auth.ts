@@ -6,6 +6,22 @@ import { prisma } from "../shared/prisma";
 import ApiError from "../../error/ApiError";
 import { jwtHelper } from "../helper/jwtHelper";
 
+// Extend Express Request type
+declare global {
+  namespace Express {
+    interface Request {
+      user?: {
+        userId: string;
+        email: string;
+        role: string;
+        vendorId?: string;
+        supplierId?: string;
+        vendorCompany?: string;
+      };
+    }
+  }
+}
+
 const auth = (...requiredRoles: ("ADMIN" | "VENDOR" | "SUPPLIER")[]) => {
   return async (req: Request, res: Response, next: NextFunction) => {
     try {
@@ -17,10 +33,15 @@ const auth = (...requiredRoles: ("ADMIN" | "VENDOR" | "SUPPLIER")[]) => {
       }
 
       // 2. Verify JWT
-      const decoded = jwtHelper.verifyToken(token, config.jwt.jwt_secret as string) as any;
+      let decoded;
+      try {
+        decoded = jwtHelper.verifyToken(token, config.jwt.jwt_secret as string) as any;
+      } catch (error) {
+        throw new ApiError(httpStatus.UNAUTHORIZED, "Invalid or expired token");
+      }
 
       if (!decoded?.userId || !decoded?.role) {
-        throw new ApiError(httpStatus.UNAUTHORIZED, "Invalid or expired token");
+        throw new ApiError(httpStatus.UNAUTHORIZED, "Invalid token payload");
       }
 
       // 3. Check if user exists and is active
@@ -53,23 +74,31 @@ const auth = (...requiredRoles: ("ADMIN" | "VENDOR" | "SUPPLIER")[]) => {
         );
       }
 
-      // 5. Inject role-specific data
+      // 5. Prepare user data for request
       const userData: any = {
         userId: user.id,
         email: user.email,
         role: user.role,
       };
 
-      if (user.role === "VENDOR" && user.vendorId) {
+      // Use vendorId from JWT or database
+      if (decoded.vendorId) {
+        userData.vendorId = decoded.vendorId;
+      } else if (user.role === "VENDOR" && user.vendorId) {
         userData.vendorId = user.vendorId;
       }
 
-      if (user.role === "SUPPLIER" && user.supplierId) {
+      // Use supplierId from JWT or database
+      if (decoded.supplierId) {
+        userData.supplierId = decoded.supplierId;
+      } else if (user.role === "SUPPLIER" && user.supplierId) {
         userData.supplierId = user.supplierId;
-        
-        // Get vendorId from supplier
+      }
+
+      // 6. For suppliers, get vendor info
+      if (user.role === "SUPPLIER" && userData.supplierId) {
         const supplier = await prisma.supplier.findUnique({
-          where: { id: user.supplierId },
+          where: { id: userData.supplierId },
           select: { 
             vendorId: true,
             vendor: {
@@ -87,16 +116,18 @@ const auth = (...requiredRoles: ("ADMIN" | "VENDOR" | "SUPPLIER")[]) => {
         }
       }
 
-      // 6. Attach user to request
+      // 7. Attach user to request
       req.user = userData;
 
-      // 7. Role-based access control
-      if (requiredRoles.length > 0 && !requiredRoles.includes(user.role as "ADMIN" | "VENDOR" | "SUPPLIER")) {
+      // 8. Role-based access control
+      if (requiredRoles.length > 0 && !requiredRoles.includes(user.role as any)) {
         throw new ApiError(httpStatus.FORBIDDEN, "You do not have permission to access this resource");
       }
 
+      console.log(`✅ Auth passed - User: ${user.email}, Role: ${user.role}, UserId: ${user.id}`);
       next();
     } catch (error) {
+      console.error('❌ Auth error:', error);
       next(error);
     }
   };

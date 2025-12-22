@@ -198,6 +198,31 @@ export const createSupplier = catchAsync(
     });
   }
 );
+
+const getSingleSupplierProgress = catchAsync(async (req: Request, res: Response) => {
+  const vendorId = req.user?.vendorId;
+  const { supplierId } = req.params;
+  
+  if (!vendorId) {
+    return sendResponse(res, {
+      statusCode: httpStatus.UNAUTHORIZED,
+      success: false,
+      message: "Vendor ID not found",
+      data: null
+    });
+  }
+
+  const progress = await VendorService.getSingleSupplierProgress(supplierId, vendorId);
+  
+  sendResponse(res, {
+    statusCode: httpStatus.OK,
+    success: true,
+    message: "Supplier progress retrieved successfully",
+    data: progress
+  });
+});
+
+
 export const VendorController = {
   getDashboardStats,
   getVendorProfile,
@@ -206,5 +231,6 @@ export const VendorController = {
   getSupplierById,
   reviewAssessment,
   reviewEvidence,
-  createSupplier
+  createSupplier,
+  getSingleSupplierProgress
 };

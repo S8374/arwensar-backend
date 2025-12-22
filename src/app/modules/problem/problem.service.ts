@@ -17,179 +17,192 @@ export interface ProblemStats {
 
 export const ProblemService = {
   // ========== CREATE PROBLEM ==========
- async createProblem(userId: string, data: any): Promise<Problem & { supplier?: any }> {
-  // Get user info
-  const user = await prisma.user.findUnique({
-    where: { id: userId },
-    select: { role: true, vendorId: true, supplierId: true }
-  });
+async createProblem(userId: string, data: any): Promise<any> {
+    // Get authenticated user
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { role: true, vendorId: true, supplierId: true }
+    });
 
-  if (!user) {
-    throw new ApiError(httpStatus.NOT_FOUND, "User not found");
-  }
-
-  // Get supplier
-  const supplier = await prisma.supplier.findUnique({
-    where: { id: data.supplierId },
-    include: {
-      vendor: {
-        select: { userId: true, companyName: true }
-      },
-      user: {
-        select: { id: true, email: true }
-      }
+    if (!user) {
+      throw new ApiError(httpStatus.NOT_FOUND, "User not found");
     }
-  });
 
-  if (!supplier) {
-    throw new ApiError(httpStatus.NOT_FOUND, "Supplier not found");
-  }
+    let supplierId: string;
+    let vendorId: string;
 
-  // Check permissions
-  if (user.role === 'VENDOR' && supplier.vendorId !== user.vendorId) {
-    throw new ApiError(httpStatus.FORBIDDEN, "You can only create problems for your own suppliers");
-  }
+    // Determine supplierId and vendorId based on role
+    if (user.role === 'VENDOR') {
+      // Vendor reporting problem about a supplier
+      if (!data.supplierId) {
+        throw new ApiError(httpStatus.BAD_REQUEST, "supplierId is required when vendor reports a problem");
+      }
+      supplierId = data.supplierId;
+      vendorId = user.vendorId!;
+    } else if (user.role === 'SUPPLIER') {
+      // Supplier reporting problem to their vendor
+      if (!user.supplierId) {
+        throw new ApiError(httpStatus.BAD_REQUEST, "Your account is not linked to a supplier profile");
+      }
+      supplierId = user.supplierId;
+      // Get vendorId from supplier's profile
+      const supplierProfile = await prisma.supplier.findUnique({
+        where: { id: user.supplierId },
+        select: { vendorId: true }
+      });
+      if (!supplierProfile?.vendorId) {
+        throw new ApiError(httpStatus.BAD_REQUEST, "Your supplier profile is not linked to a vendor");
+      }
+      vendorId = supplierProfile.vendorId;
+    } else {
+      throw new ApiError(httpStatus.FORBIDDEN, "Unauthorized role");
+    }
 
-  if (user.role === 'SUPPLIER' && supplier.userId !== userId) {
-    throw new ApiError(httpStatus.FORBIDDEN, "You can only create problems for yourself");
-  }
-
-  const problemData: any = {
-    title: data.title,
-    description: data.description,
-    type: data.type,
-    direction: data.direction,
-    priority: data.priority,
-    reportedById: userId,
-    vendorId: supplier.vendorId,
-    supplierId: data.supplierId,
-    status: 'OPEN',
-    attachments: data.attachments || []
-  };
-
-  if (data.dueDate) {
-    problemData.dueDate = new Date(data.dueDate);
-  }
-
-  const problem = await prisma.problem.create({
-    data: problemData,
-    include: {
-      reportedBy: {
-        select: {
-          id: true,
-          email: true,
-          role: true
+    // Fetch supplier with relations
+    const supplier = await prisma.supplier.findUnique({
+      where: { id: supplierId },
+      include: {
+        vendor: {
+          select: { userId: true, companyName: true }
+        },
+        user: {
+          select: { id: true, email: true }
         }
       }
-    }
-  });
+    });
 
-  // Add supplier details manually
-  const problemWithSupplier = {
-    ...problem,
-    supplier: {
-      id: supplier.id,
-      name: supplier.name,
-      email: supplier.email
+    if (!supplier) {
+      throw new ApiError(httpStatus.NOT_FOUND, "Supplier not found");
     }
-  };
 
-  // Create initial message if provided
-  if (data.initialMessage) {
-    await prisma.problemMessage.create({
-      data: {
-        content: data.initialMessage,
-        isInternal: data.isInternal || false,
-        attachments: data.attachments || [],
-        problemId: problem.id,
-        senderId: userId
+    // Final permission check
+    if (user.role === 'VENDOR' && supplier.vendorId !== user.vendorId) {
+      throw new ApiError(httpStatus.FORBIDDEN, "You can only create problems for your own suppliers");
+    }
+
+    const problemData: any = {
+      title: data.title,
+      description: data.description,
+      type: data.type,
+      direction: data.direction,
+      priority: data.priority,
+      reportedById: userId,
+      vendorId,
+      supplierId,
+      status: 'OPEN',
+      attachments: data.attachments || []
+    };
+
+    if (data.dueDate) {
+      problemData.dueDate = new Date(data.dueDate);
+    }
+
+    const problem = await prisma.problem.create({
+      data: problemData,
+      include: {
+        reportedBy: {
+          select: {
+            id: true,
+            email: true,
+            role: true
+          }
+        }
       }
     });
-  }
 
-  // Create notifications
-  const notifications = [];
+    // Return with supplier info
+    const problemWithSupplier = {
+      ...problem,
+      supplier: {
+        id: supplier.id,
+        name: supplier.name,
+        email: supplier.email,
+        companyName: supplier.vendor.companyName
+      }
+    };
 
-  // Notify supplier if direction is VENDOR_TO_SUPPLIER
-  if (data.direction === 'VENDOR_TO_SUPPLIER' && supplier.userId) {
-    notifications.push(
-      NotificationService.createNotification({
-        userId: supplier.userId,
-        title: "New Problem Reported",
-        message: `A new problem has been reported: ${data.title}`,
-        type: 'PROBLEM_REPORTED',
-        metadata: {
+    // Create initial message if provided
+    if (data.initialMessage) {
+      await prisma.problemMessage.create({
+        data: {
+          content: data.initialMessage,
+          isInternal: data.isInternal || false,
+          attachments: data.attachments || [],
           problemId: problem.id,
-          title: data.title,
-          priority: data.priority,
-          reportedBy: user.role
-        },
-        priority: data.priority === 'URGENT' ? 'HIGH' : 'MEDIUM'
-      })
-    );
+          senderId: userId
+        }
+      });
+    }
 
-    // Send email to supplier
-    if (supplier.user?.email) {
+    // === NOTIFICATIONS & EMAILS ===
+    const notifications = [];
+
+    // Notify the other party
+    if (data.direction === 'VENDOR_TO_SUPPLIER' && supplier.user?.id) {
+      notifications.push(
+        NotificationService.createNotification({
+          userId: supplier.user.id,
+          title: "New Problem Reported",
+          message: `Your vendor has reported a problem: ${data.title}`,
+          type: 'PROBLEM_REPORTED',
+          metadata: {
+            problemId: problem.id,
+            title: data.title,
+            priority: data.priority
+          },
+          priority: data.priority === 'URGENT' ? 'HIGH' : 'MEDIUM'
+        })
+      );
+
+      // Email to supplier
       try {
-        mailtrapService.sendHtmlEmail({
+        await mailtrapService.sendHtmlEmail({
           to: supplier.user.email,
           subject: `New Problem Reported: ${data.title}`,
           html: `
             <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-              <h2 style="color: #333;">New Problem Reported</h2>
-              <p>${supplier.vendor.companyName} has reported a new problem regarding your services.</p>
-              
-              <div style="background-color: #f8f9fa; padding: 20px; border-radius: 5px; margin: 20px 0;">
-                <h3 style="margin-top: 0;">Problem Details:</h3>
+              <h2>New Problem Reported</h2>
+              <p>Your vendor has reported an issue regarding your services.</p>
+              <div style="background:#f8f9fa;padding:20px;border-radius:8px;margin:20px 0;">
                 <p><strong>Title:</strong> ${data.title}</p>
                 <p><strong>Description:</strong> ${data.description}</p>
-                <p><strong>Type:</strong> ${data.type}</p>
-                <p><strong>Priority:</strong> <span style="color: ${this.getPriorityColor(data.priority)}">${data.priority}</span></p>
-                ${data.dueDate ? `<p><strong>Due Date:</strong> ${new Date(data.dueDate).toLocaleDateString()}</p>` : ''}
+                <p><strong>Priority:</strong> ${data.priority}</p>
+                ${data.dueDate ? `<p><strong>Due:</strong> ${new Date(data.dueDate).toLocaleDateString()}</p>` : ''}
               </div>
-              
-              <p>Please log in to your dashboard to respond to this problem.</p>
-              
-              <div style="text-align: center; margin: 30px 0;">
-                <a href="${process.env.FRONTEND_URL}/problems/${problem.id}" style="background-color: #007bff; color: white; padding: 12px 30px; text-decoration: none; border-radius: 5px; font-weight: bold;">
-                  View Problem
-                </a>
-              </div>
-              
-              <hr style="border: none; border-top: 1px solid #eee; margin: 20px 0;">
-              <p style="color: #666; font-size: 12px;">© ${new Date().getFullYear()} CyberNark. All rights reserved.</p>
+              <p>Please log in to respond.</p>
+              <a href="${process.env.FRONTEND_URL}/problems/${problem.id}" style="background:#007bff;color:white;padding:12px 30px;text-decoration:none;border-radius:5px;display:inline-block;">
+                View Problem
+              </a>
             </div>
           `
         });
       } catch (error) {
-        console.error("Failed to send problem email:", error);
+        console.error("Failed to send email:", error);
       }
     }
+
+    if (data.direction === 'SUPPLIER_TO_VENDOR' && supplier.vendor.userId) {
+      notifications.push(
+        NotificationService.createNotification({
+          userId: supplier.vendor.userId,
+          title: "Problem Reported by Supplier",
+          message: `${supplier.name} reported: ${data.title}`,
+          type: 'PROBLEM_REPORTED',
+          metadata: {
+            problemId: problem.id,
+            title: data.title,
+            priority: data.priority,
+            supplierName: supplier.name
+          },
+          priority: data.priority === 'URGENT' ? 'HIGH' : 'MEDIUM'
+        })
+      );
+    }
+
+    await Promise.all(notifications);
+
+    return problemWithSupplier;
   }
-
-  // Notify vendor if direction is SUPPLIER_TO_VENDOR
-  if (data.direction === 'SUPPLIER_TO_VENDOR' && supplier.vendor.userId) {
-    notifications.push(
-      NotificationService.createNotification({
-        userId: supplier.vendor.userId,
-        title: "New Problem Reported by Supplier",
-        message: `${supplier.name} has reported a new problem: ${data.title}`,
-        type: 'PROBLEM_REPORTED',
-        metadata: {
-          problemId: problem.id,
-          title: data.title,
-          priority: data.priority,
-          supplierName: supplier.name
-        },
-        priority: data.priority === 'URGENT' ? 'HIGH' : 'MEDIUM'
-      })
-    );
-  }
-
-  await Promise.all(notifications);
-
-  return problemWithSupplier;
-}
 ,
   // ========== GET PROBLEMS ==========
  async getProblems(userId: string, options: any = {}): Promise<{ problems: any[]; meta: any }> {

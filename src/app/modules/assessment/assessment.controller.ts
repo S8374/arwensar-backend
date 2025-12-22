@@ -7,7 +7,7 @@ import catchAsync from "../../shared/catchAsync";
 
 const getAssessments = catchAsync(async (req: Request, res: Response) => {
   const userId = req.user?.userId;
-  
+
   if (!userId) {
     return sendResponse(res, {
       statusCode: httpStatus.UNAUTHORIZED,
@@ -18,7 +18,7 @@ const getAssessments = catchAsync(async (req: Request, res: Response) => {
   }
 
   const result = await AssessmentService.getAssessments(userId, req.query);
-  
+
   sendResponse(res, {
     statusCode: httpStatus.OK,
     success: true,
@@ -31,7 +31,7 @@ const getAssessments = catchAsync(async (req: Request, res: Response) => {
 const getAssessmentById = catchAsync(async (req: Request, res: Response) => {
   const userId = req.user?.userId;
   const { assessmentId } = req.params;
-  
+
   if (!userId) {
     return sendResponse(res, {
       statusCode: httpStatus.UNAUTHORIZED,
@@ -42,7 +42,7 @@ const getAssessmentById = catchAsync(async (req: Request, res: Response) => {
   }
 
   const assessment = await AssessmentService.getAssessmentById(assessmentId, userId);
-  
+
   sendResponse(res, {
     statusCode: httpStatus.OK,
     success: true,
@@ -52,9 +52,10 @@ const getAssessmentById = catchAsync(async (req: Request, res: Response) => {
 });
 
 const getSubmissions = catchAsync(async (req: Request, res: Response) => {
-  console.log("Getting submissions" ,  req);
+  console.log("Hits.................................................")
+  console.log("Getting submissions", req);
   const userId = req.user?.userId;
-   
+
   if (!userId) {
     return sendResponse(res, {
       statusCode: httpStatus.UNAUTHORIZED,
@@ -78,7 +79,7 @@ const getSubmissions = catchAsync(async (req: Request, res: Response) => {
 const getSubmissionById = catchAsync(async (req: Request, res: Response) => {
   const userId = req.user?.userId;
   const { submissionId } = req.params;
-  
+
   if (!userId) {
     return sendResponse(res, {
       statusCode: httpStatus.UNAUTHORIZED,
@@ -89,7 +90,7 @@ const getSubmissionById = catchAsync(async (req: Request, res: Response) => {
   }
 
   const submission = await AssessmentService.getSubmissionById(submissionId, userId);
-  
+
   sendResponse(res, {
     statusCode: httpStatus.OK,
     success: true,
@@ -101,7 +102,7 @@ const getSubmissionById = catchAsync(async (req: Request, res: Response) => {
 const startAssessment = catchAsync(async (req: Request, res: Response) => {
   const userId = req.user?.userId;
   const { assessmentId } = req.body;
-  
+  console.log("Starting assessment", assessmentId, userId);
   if (!userId) {
     return sendResponse(res, {
       statusCode: httpStatus.UNAUTHORIZED,
@@ -112,7 +113,7 @@ const startAssessment = catchAsync(async (req: Request, res: Response) => {
   }
 
   const submission = await AssessmentService.startAssessment(userId, assessmentId);
-  
+
   sendResponse(res, {
     statusCode: httpStatus.OK,
     success: true,
@@ -122,9 +123,11 @@ const startAssessment = catchAsync(async (req: Request, res: Response) => {
 });
 
 const saveAnswer = catchAsync(async (req: Request, res: Response) => {
+  console.log("Saving answersssssssssssssssssssssssssssssssss", req.body);
   const userId = req.user?.userId;
   const { submissionId, questionId } = req.params;
-  
+  console.log("User IDsssssssssssssssss:", userId);
+  console.log("Saving answer for submission:", submissionId, "question:", questionId);
   if (!userId) {
     return sendResponse(res, {
       statusCode: httpStatus.UNAUTHORIZED,
@@ -140,7 +143,7 @@ const saveAnswer = catchAsync(async (req: Request, res: Response) => {
     userId,
     req.body
   );
-  
+
   sendResponse(res, {
     statusCode: httpStatus.OK,
     success: true,
@@ -152,7 +155,7 @@ const saveAnswer = catchAsync(async (req: Request, res: Response) => {
 const submitAssessment = catchAsync(async (req: Request, res: Response) => {
   const userId = req.user?.userId;
   const { submissionId } = req.params;
-  
+
   if (!userId) {
     return sendResponse(res, {
       statusCode: httpStatus.UNAUTHORIZED,
@@ -167,7 +170,7 @@ const submitAssessment = catchAsync(async (req: Request, res: Response) => {
     userId,
     req.body
   );
-  
+
   sendResponse(res, {
     statusCode: httpStatus.OK,
     success: true,
@@ -179,7 +182,7 @@ const submitAssessment = catchAsync(async (req: Request, res: Response) => {
 const reviewAssessment = catchAsync(async (req: Request, res: Response) => {
   const userId = req.user?.userId;
   const { submissionId } = req.params;
-  
+
   if (!userId) {
     return sendResponse(res, {
       statusCode: httpStatus.UNAUTHORIZED,
@@ -194,7 +197,7 @@ const reviewAssessment = catchAsync(async (req: Request, res: Response) => {
     userId,
     req.body
   );
-  
+
   sendResponse(res, {
     statusCode: httpStatus.OK,
     success: true,
@@ -206,7 +209,7 @@ const reviewAssessment = catchAsync(async (req: Request, res: Response) => {
 const reviewEvidence = catchAsync(async (req: Request, res: Response) => {
   const userId = req.user?.userId;
   const { answerId } = req.params;
-  
+
   if (!userId) {
     return sendResponse(res, {
       statusCode: httpStatus.UNAUTHORIZED,
@@ -221,7 +224,7 @@ const reviewEvidence = catchAsync(async (req: Request, res: Response) => {
     userId,
     req.body
   );
-  
+
   sendResponse(res, {
     statusCode: httpStatus.OK,
     success: true,
@@ -231,8 +234,9 @@ const reviewEvidence = catchAsync(async (req: Request, res: Response) => {
 });
 
 const getAssessmentStatistics = catchAsync(async (req: Request, res: Response) => {
+  console.log("Getting assessment statistics", req.body);
   const userId = req.user?.userId;
-  
+
   if (!userId) {
     return sendResponse(res, {
       statusCode: httpStatus.UNAUTHORIZED,
@@ -243,7 +247,7 @@ const getAssessmentStatistics = catchAsync(async (req: Request, res: Response) =
   }
 
   const stats = await AssessmentService.getAssessmentStatistics(userId);
-  
+
   sendResponse(res, {
     statusCode: httpStatus.OK,
     success: true,
@@ -255,7 +259,7 @@ const getAssessmentStatistics = catchAsync(async (req: Request, res: Response) =
 const requestEvidence = catchAsync(async (req: Request, res: Response) => {
   const userId = req.user?.userId;
   const { answerId } = req.params;
-  
+
   if (!userId) {
     return sendResponse(res, {
       statusCode: httpStatus.UNAUTHORIZED,
@@ -270,7 +274,7 @@ const requestEvidence = catchAsync(async (req: Request, res: Response) => {
     userId,
     req.body.reason
   );
-  
+
   sendResponse(res, {
     statusCode: httpStatus.OK,
     success: true,
@@ -279,6 +283,55 @@ const requestEvidence = catchAsync(async (req: Request, res: Response) => {
   });
 });
 
+const getDraftSubmissionById = catchAsync(async (req: Request, res: Response) => {
+  console.log("Getting draft submission", req.params , req.user);
+  const userId = req.user?.userId;
+  const { submissionId } = req.params;
+  console.log("User IDsssssssssssssssss:", userId);
+  if (!userId) {
+    return sendResponse(res, {
+      statusCode: httpStatus.UNAUTHORIZED,
+      success: false,
+      message: "User ID not found",
+      data: null
+    });
+  }
+
+  const submission = await AssessmentService.getDraftSubmissionById(submissionId, userId);
+
+  sendResponse(res, {
+    statusCode: httpStatus.OK,
+    success: true,
+    message: "Draft submission retrieved successfully",
+    data: submission
+  });
+});
+// src/modules/assessment/assessment.controller.ts (add this method)
+const removeEvidence = catchAsync(async (req: Request, res: Response) => {
+  const userId = req.user?.userId;
+  const { answerId } = req.params;
+  
+  if (!userId) {
+    return sendResponse(res, {
+      statusCode: httpStatus.UNAUTHORIZED,
+      success: false,
+      message: "User ID not found",
+      data: null
+    });
+  }
+
+  const answer = await AssessmentService.removeEvidence(
+    answerId,
+    userId,
+  );
+  
+  sendResponse(res, {
+    statusCode: httpStatus.OK,
+    success: true,
+    message: "Evidence removed successfully",
+    data: answer
+  });
+});
 export const AssessmentController = {
   getAssessments,
   getAssessmentById,
@@ -290,5 +343,8 @@ export const AssessmentController = {
   reviewAssessment,
   reviewEvidence,
   getAssessmentStatistics,
-  requestEvidence
+  requestEvidence,
+  getDraftSubmissionById,
+
+  removeEvidence
 };

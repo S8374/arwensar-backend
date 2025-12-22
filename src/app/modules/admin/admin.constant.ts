@@ -66,7 +66,6 @@ export const createAssessmentSchema = z.object({
         isDocument: z.boolean().default(false),
         isInputField: z.boolean().default(false),
         answerType: z.enum(['YES', 'NO', 'PARTIAL', 'NOT_APPLICABLE', 'NA']).default('YES'),
-        required: z.boolean().default(true),
         weight: z.number().optional(),
         maxScore: z.number().int().default(10),
         helpText: z.string().optional(),

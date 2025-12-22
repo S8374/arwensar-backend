@@ -20,7 +20,7 @@ export const updatePasswordSchema = z.object({
     path: ["confirmPassword"]
   })
 });
-
+// Update your notification preferences schema
 export const updateNotificationPreferencesSchema = z.object({
   body: z.object({
     emailNotifications: z.boolean().optional(),

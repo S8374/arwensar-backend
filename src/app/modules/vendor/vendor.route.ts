@@ -57,5 +57,9 @@ router.post(
   auth("VENDOR"),
   VendorController.reviewEvidence
 );
-
+router.get(
+  "/suppliers/:supplierId/progress",
+  auth("VENDOR"),
+  VendorController.getSingleSupplierProgress
+);
 export const VendorRoutes = router;

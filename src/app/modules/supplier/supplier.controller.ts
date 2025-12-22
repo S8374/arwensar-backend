@@ -94,11 +94,12 @@ const getAssessments = catchAsync(async (req: Request, res: Response) => {
 });
 
 const startAssessment = catchAsync(async (req: Request, res: Response) => {
-  const supplierId = req.user?.supplierId;
+  console.log("Starting assessment", req.params , req.user);
+  const supplierId = req.user?.userId;
   const { assessmentId } = req.params;
-  
+   console.log("Assessment ID:", assessmentId, "Supplier ID:", supplierId);
   if (!supplierId) {
-    return sendResponse(res, {
+    return sendResponse(res , {
       statusCode: httpStatus.UNAUTHORIZED,
       success: false,
       message: "Supplier ID not found",

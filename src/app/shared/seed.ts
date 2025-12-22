@@ -207,7 +207,7 @@ const FREE_TRIAL_PLAN = {
 
 async function createStripeProductAndPrice(plan: any): Promise<{ productId: string; priceId: string }> {
   try {
-    console.log(`🔄 Creating Stripe product for: ${plan.name} (${plan.billingCycle})`);
+  //  console.log(`🔄 Creating Stripe product for: ${plan.name} (${plan.billingCycle})`);
 
     // Create or get product
     let productId = plan.stripeProductId;
@@ -222,7 +222,7 @@ async function createStripeProductAndPrice(plan: any): Promise<{ productId: stri
         }
       });
       productId = product.id;
-      console.log(`✅ Stripe product created: ${productId}`);
+     // console.log(`✅ Stripe product created: ${productId}`);
     }
 
     // Convert billing cycle to Stripe format
@@ -251,7 +251,7 @@ async function createStripeProductAndPrice(plan: any): Promise<{ productId: stri
       }
     });
 
-    console.log(`✅ Stripe price created: ${price.id} (${plan.price} EUR/${plan.billingCycle})`);
+    //console.log(`✅ Stripe price created: ${price.id} (${plan.price} EUR/${plan.billingCycle})`);
 
     return {
       productId,

@@ -11,12 +11,13 @@ import { ReportRoutes } from '../modules/report/report.route';
 import { ProblemRoutes } from '../modules/problem/problem.route';
 import { paymentRoutes } from '../modules/payment/payment.routes';
 import { WebhookRoutes } from '../modules/webhook/webhook.routes';
+import { DocumentRoutes } from '../modules/documents/document.route';
 
 const router = express.Router();
 
 const moduleRoutes = [
   { path: '/auth', route: AuthRoutes },
-  { path: '/users', route: UserRoutes },
+  { path: '/user', route: UserRoutes },
   { path: '/admin', route: AdminRoutes },
   { path: '/vendor', route: VendorRoutes },
   { path: '/supplier', route: SupplierRoutes },
@@ -25,7 +26,8 @@ const moduleRoutes = [
   { path: '/reports', route: ReportRoutes },
   { path: '/payment', route: paymentRoutes },
   { path: '/problems', route: ProblemRoutes },
-    { path: '/webhook', route: WebhookRoutes } // Webhook routes should be last
+    { path: '/webhook', route: WebhookRoutes } ,// Webhook routes should be last
+    { path: '/documents', route: DocumentRoutes } // Document routes should be last
 
 ];
 

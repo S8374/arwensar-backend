@@ -38,3 +38,13 @@ export const reviewEvidenceSchema = z.object({
     rejectionReason: z.string().optional()
   })
 });
+
+// src/modules/assessment/assessment.constant.ts (add this)
+export const removeEvidenceSchema = z.object({
+  params: z.object({
+    answerId: z.string()
+  }),
+  body: z.object({
+    deleteFromCloudinary: z.boolean().optional().default(true)
+  })
+});

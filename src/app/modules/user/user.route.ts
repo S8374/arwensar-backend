@@ -29,7 +29,6 @@ router.patch(
 router.patch(
   "/password",
   auth("ADMIN", "VENDOR", "SUPPLIER"),
-  validateRequest(updatePasswordSchema),
   UserController.updatePassword
 );
 
@@ -43,7 +42,6 @@ router.get(
 router.patch(
   "/notifications/preferences",
   auth("ADMIN", "VENDOR", "SUPPLIER"),
-  validateRequest(updateNotificationPreferencesSchema),
   UserController.updateNotificationPreferences
 );
 

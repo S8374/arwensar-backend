@@ -27,7 +27,7 @@ model User {
   createdAssessments      Assessment[]             @relation("UserCreatedAssessments")
   assessmentSubmissions   AssessmentSubmission[]   @relation("UserSubmissions")
   createdReports          Report[]                 @relation("ReportCreator")
-  receivedReports         Report[]                 @relation("ReportRecipient")
+  receivedReports         Report[]                     @relation("ReportRecipient")
   payments                Payment[]
   reportedProblems        Problem[]                @relation("ProblemReporter")
   assignedProblems        Problem[]                @relation("ProblemAssignee")

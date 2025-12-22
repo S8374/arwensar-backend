@@ -367,7 +367,6 @@ const assessment = await prisma.assessment.create({
             isDocument: question.isDocument || false,
             isInputField: question.isInputField || false,
             answerType: question.answerType || 'YES',
-            required: question.required !== undefined ? question.required : true,
             weight: question.weight,
             maxScore: question.maxScore || 10,
             helpText: question.helpText,

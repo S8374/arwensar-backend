@@ -25,7 +25,7 @@ export interface SupplierDashboardStats {
     score: number | null;
   }>;
   nis2Status: {
-        isCompliant: boolean | null; // Change this to allow null
+    isCompliant: boolean | null; // Change this to allow null
     progress: number;
     requiredAssessments: number;
     completedAssessments: number;
@@ -101,81 +101,81 @@ export const SupplierService = {
   },
 
   // ========== CREATE SUPPLIER (VENDOR) ==========
- async createSupplier(
-  vendorId: string,
-  payload: any
-) {
+  async createSupplier(
+    vendorId: string,
+    payload: any
+  ) {
 
-  // Check if vendor exists
-  const vendor = await prisma.vendor.findUnique({
-    where: { id: vendorId },
-    include: {
-      user: { select: { email: true } }
+    // Check if vendor exists
+    const vendor = await prisma.vendor.findUnique({
+      where: { id: vendorId },
+      include: {
+        user: { select: { email: true } }
+      }
+    });
+
+    if (!vendor) {
+      throw new ApiError(httpStatus.NOT_FOUND, "Vendor not found");
     }
-  });
 
-  if (!vendor) {
-    throw new ApiError(httpStatus.NOT_FOUND, "Vendor not found");
-  }
+    // Check if supplier email already exists
+    const existingSupplier = await prisma.supplier.findUnique({
+      where: { email: payload.email }
+    });
 
-  // Check if supplier email already exists
-  const existingSupplier = await prisma.supplier.findUnique({
-    where: { email: payload.email }
-  });
+    if (existingSupplier) {
+      throw new ApiError(httpStatus.CONFLICT, "Supplier with this email already exists");
+    }
 
-  if (existingSupplier) {
-    throw new ApiError(httpStatus.CONFLICT, "Supplier with this email already exists");
-  }
+    // Generate invitation token
+    const invitationToken = jwtHelper.generateToken(
+      {
+        email: payload.email,
+        vendorId,
+        type: 'supplier_invitation'
+      },
+      config.jwt.jwt_secret as string,
+      '7d'
+    );
 
-  // Generate invitation token
-  const invitationToken = jwtHelper.generateToken(
-    {
+    // FIX: Use the proper enum value
+    const supplierData = {
+      name: payload.name,
+      contactPerson: payload.contactPerson,
       email: payload.email,
+      phone: payload.phone,
+      category: payload.category,
+      criticality: payload.criticality as Criticality,
+      contractStartDate: new Date(payload.contractStartDate),
+      contractEndDate: payload.contractEndDate ? new Date(payload.contractEndDate) : null,
+      documentUrl: payload.documentUrl,
+      documentType: payload.documentType,
       vendorId,
-      type: 'supplier_invitation'
-    },
-    config.jwt.jwt_secret as string,
-    '7d'
-  );
+      invitationToken,
+      invitationSentAt: new Date(),
+      invitationStatus: InvitationStatus.SENT, // FIX: Use enum value instead of string
+      isActive: false
+    };
 
-  // FIX: Use the proper enum value
-  const supplierData = {
-    name: payload.name,
-    contactPerson: payload.contactPerson,
-    email: payload.email,
-    phone: payload.phone,
-    category: payload.category,
-    criticality: payload.criticality as Criticality,
-    contractStartDate: new Date(payload.contractStartDate),
-    contractEndDate: payload.contractEndDate ? new Date(payload.contractEndDate) : null,
-    documentUrl: payload.documentUrl,
-    documentType: payload.documentType,
-    vendorId,
-    invitationToken,
-    invitationSentAt: new Date(),
-    invitationStatus: InvitationStatus.SENT, // FIX: Use enum value instead of string
-    isActive: false
-  };
-
-  const supplier = await prisma.supplier.create({
-    data: supplierData,
-    include: {
-      vendor: {
-        select: {
-          companyName: true,
-          firstName: true,
-          lastName: true
+    const supplier = await prisma.supplier.create({
+      data: supplierData,
+      include: {
+        vendor: {
+          select: {
+            companyName: true,
+            firstName: true,
+            lastName: true
+          }
         }
       }
-    }
-  });
+    });
 
-  // Send invitation email
-  try {
-    await mailtrapService.sendHtmlEmail({ // FIX: Added await
-      to: payload.email,
-      subject: `Invitation to Join ${vendor.companyName} on CyberNark`,
-      html: `
+    // Send invitation email
+    try {
+      await mailtrapService.sendHtmlEmail({ // FIX: Added await
+        to: payload.email,
+        subject: `Invitation to Join ${vendor.companyName} on CyberNark`,
+        html: `
         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
           <h2 style="color: #333;">You're Invited to Join CyberNark!</h2>
           <p>${vendor.firstName} ${vendor.lastName} from <strong>${vendor.companyName}</strong> has invited you to join their supplier network on CyberNark.</p>
@@ -204,23 +204,23 @@ export const SupplierService = {
           <p style="color: #666; font-size: 12px;">© ${new Date().getFullYear()} CyberNark. All rights reserved.</p>
         </div>
       `
-    });
+      });
 
-    return {
-      supplier,
-      invitationSent: true,
-      message: "Supplier created and invitation email sent successfully"
-    };
-  } catch (emailError) {
-    console.error("Failed to send invitation email:", emailError);
-    return {
-      supplier,
-      invitationSent: false,
-      message: "Supplier created but failed to send invitation email"
-    };
+      return {
+        supplier,
+        invitationSent: true,
+        message: "Supplier created and invitation email sent successfully"
+      };
+    } catch (emailError) {
+      console.error("Failed to send invitation email:", emailError);
+      return {
+        supplier,
+        invitationSent: false,
+        message: "Supplier created but failed to send invitation email"
+      };
+    }
   }
-}
-,
+  ,
   // ========== COMPLETE SUPPLIER REGISTRATION ==========
   async completeSupplierRegistration(payload: any): Promise<{ supplier: Supplier; user: User }> {
     let decodedToken;
@@ -495,10 +495,17 @@ export const SupplierService = {
     assessmentId: string,
     userId: string
   ): Promise<AssessmentSubmission> {
+    console.log("Starting assessment for supplier:", supplierId, "assessment:", assessmentId);
+
     // Check if assessment exists and is active
     const assessment = await prisma.assessment.findUnique({
-      where: { id: assessmentId, isActive: true }
+      where: {
+        id: assessmentId,
+        isActive: true
+      }
     });
+
+    console.log("Found assessment:", assessment);
 
     if (!assessment) {
       throw new ApiError(httpStatus.NOT_FOUND, "Assessment not found");
@@ -509,6 +516,8 @@ export const SupplierService = {
       where: { id: supplierId },
       include: { vendor: true }
     });
+
+    console.log("Found supplier:", supplier);
 
     if (!supplier) {
       throw new ApiError(httpStatus.NOT_FOUND, "Supplier not found");
@@ -523,6 +532,8 @@ export const SupplierService = {
       }
     });
 
+    console.log("Existing submission:", existingSubmission);
+
     if (existingSubmission) {
       return existingSubmission;
     }
@@ -535,6 +546,8 @@ export const SupplierService = {
         }
       }
     });
+
+    console.log("Total questions:", totalQuestions);
 
     // Create new submission
     const submission = await prisma.assessmentSubmission.create({
@@ -549,10 +562,21 @@ export const SupplierService = {
         progress: 0,
         status: 'DRAFT',
         startedAt: new Date()
+      },
+      include: {
+        assessment: {
+          select: {
+            id: true,
+            title: true,
+            description: true
+          }
+        }
       }
     });
 
-    return submission;
+    console.log("Created submission:", submission);
+
+    return submission
   },
 
   // ========== SAVE ASSESSMENT ANSWER ==========
@@ -675,8 +699,7 @@ export const SupplierService = {
       where: {
         category: {
           assessmentId: submission.assessmentId
-        },
-        required: true
+        }
       }
     });
 
@@ -794,5 +817,5 @@ export const SupplierService = {
 
     return result;
   }
-  
+
 };

@@ -19,8 +19,8 @@ export interface AssessmentProgress {
 export const AssessmentService = {
   // ========== GET ASSESSMENTS ==========
   async getAssessments(userId: string, options: any = {}): Promise<{ assessments: any[]; meta: any }> {
-    const { 
-      page = 1, 
+    const {
+      page = 1,
       limit = 20,
       stage,
       isActive,
@@ -28,7 +28,7 @@ export const AssessmentService = {
       sortBy = 'createdAt',
       sortOrder = 'desc'
     } = options;
-    
+
     const skip = (page - 1) * limit;
 
     const where: any = { isActive: true };
@@ -156,8 +156,8 @@ export const AssessmentService = {
 
   // ========== GET SUBMISSIONS ==========
   async getSubmissions(userId: string, options: any = {}): Promise<{ submissions: any[]; meta: any }> {
-    const { 
-      page = 1, 
+    const {
+      page = 1,
       limit = 20,
       status,
       stage,
@@ -166,7 +166,7 @@ export const AssessmentService = {
       sortBy = 'createdAt',
       sortOrder = 'desc'
     } = options;
-    
+
     const skip = (page - 1) * limit;
 
     const user = await prisma.user.findUnique({
@@ -327,7 +327,7 @@ export const AssessmentService = {
       throw new ApiError(httpStatus.NOT_FOUND, "User not found");
     }
 
-    const canView = 
+    const canView =
       submission.userId === userId ||
       (user.role === 'VENDOR' && submission.vendorId === user.vendorId) ||
       (user.role === 'ADMIN');
@@ -384,14 +384,14 @@ export const AssessmentService = {
 
     const calculateCategoryScore = (categoryAnswers: any[]) => {
       if (categoryAnswers.length === 0) return 0;
-      
+
       const totalScore = categoryAnswers.reduce(
         (sum, answer) => sum + (answer.score?.toNumber() || 0), 0
       );
       const totalMaxScore = categoryAnswers.reduce(
         (sum, answer) => sum + (answer.question.maxScore || 10), 0
       );
-      
+
       return totalMaxScore > 0 ? (totalScore / totalMaxScore) * 100 : 0;
     };
 
@@ -421,7 +421,7 @@ export const AssessmentService = {
     const assessment = await prisma.assessment.findUnique({
       where: { id: assessmentId, isActive: true }
     });
-
+    console.log("Assessment found:", assessment);
     if (!assessment) {
       throw new ApiError(httpStatus.NOT_FOUND, "Assessment not found or inactive");
     }
@@ -585,10 +585,10 @@ export const AssessmentService = {
     // Handle evidence
     if (data.evidence || data.evidenceFile) {
       answerData.evidence = data.evidence || data.evidenceFile;
-      
+
       if (question.evidenceRequired) {
         answerData.evidenceStatus = 'SUBMITTED';
-        
+
         // Create document record if evidenceFile is provided
         if (data.evidenceFile) {
           await prisma.document.create({
@@ -600,7 +600,7 @@ export const AssessmentService = {
               mimeType: 'application/octet-stream',
               uploadedById: userId,
               supplierId: submission.supplierId,
-              assessmentAnswerId: questionId,
+              assessmentAnswerId: questionId ,
               isPrivate: true,
               accessRoles: ['VENDOR', 'ADMIN']
             }
@@ -677,8 +677,7 @@ export const AssessmentService = {
       where: {
         category: {
           assessmentId: submission.assessmentId
-        },
-        required: true
+        }
       }
     });
 
@@ -699,7 +698,7 @@ export const AssessmentService = {
     // Calculate overall score
     let totalScore = 0;
     let totalMaxScore = 0;
-    
+
     submission.answers.forEach(answer => {
       if (answer.score !== null && answer.score !== undefined) {
         totalScore += answer.score.toNumber();
@@ -780,10 +779,9 @@ export const AssessmentService = {
                     <p><strong>Assessment:</strong> ${submission.assessment.title}</p>
                     <p><strong>Supplier:</strong> ${submission.supplierId}</p>
                     <p><strong>Score:</strong> ${finalScore.toFixed(2)}%</p>
-                    <p><strong>Risk Level:</strong> <span style="color: ${
-                      bivScores.riskLevel === 'HIGH' ? '#dc3545' : 
-                      bivScores.riskLevel === 'MEDIUM' ? '#ffc107' : '#28a745'
-                    }">${bivScores.riskLevel}</span></p>
+                    <p><strong>Risk Level:</strong> <span style="color: ${bivScores.riskLevel === 'HIGH' ? '#dc3545' :
+                  bivScores.riskLevel === 'MEDIUM' ? '#ffc107' : '#28a745'
+                }">${bivScores.riskLevel}</span></p>
                     <p><strong>Submitted At:</strong> ${new Date().toLocaleString()}</p>
                   </div>
                   
@@ -1247,5 +1245,188 @@ export const AssessmentService = {
     }
 
     return updatedAnswer;
+  },
+  // Also, make sure you have the correct method in your service:
+  async getDraftSubmissionById(submissionId: string, userId: string): Promise<any> {
+    // First get the submission
+    const submission = await prisma.assessmentSubmission.findUnique({
+      where: { id: submissionId },
+      include: {
+        assessment: {
+          include: {
+            categories: {
+              include: {
+                questions: {
+                  orderBy: { order: 'asc' }
+                }
+              },
+              orderBy: { order: 'asc' }
+            }
+          }
+        },
+        user: {
+          select: {
+            id: true,
+            email: true,
+            role: true
+          }
+        },
+        supplier: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            vendor: {
+              select: {
+                id: true,
+                companyName: true
+              }
+            }
+          }
+        },
+        answers: {
+          include: {
+            question: {
+              select: {
+                id: true,
+                question: true,
+                description: true,
+                bivCategory: true,
+                evidenceRequired: true,
+                maxScore: true
+              }
+            }
+          }
+        }
+      }
+    });
+
+    if (!submission) {
+      throw new ApiError(httpStatus.NOT_FOUND, "Submission not found");
+    }
+
+    // Check if it's a draft
+    if (submission.status !== 'DRAFT') {
+      throw new ApiError(httpStatus.BAD_REQUEST, "This is not a draft submission");
+    }
+
+    // Get user to check permissions
+    const user = await prisma.user.findUnique({
+      where: { id: userId }
+    });
+
+    if (!user) {
+      throw new ApiError(httpStatus.NOT_FOUND, "User not found");
+    }
+
+    // Check permissions
+    const canView =
+      submission.userId === userId ||
+      (user.role === 'VENDOR' && submission.vendorId === user.vendorId) ||
+      (user.role === 'ADMIN');
+
+    if (!canView) {
+      throw new ApiError(httpStatus.FORBIDDEN, "You don't have permission to view this draft");
+    }
+
+    // Calculate progress
+    const totalQuestions = submission.assessment.categories.reduce(
+      (sum: number, category: any) => sum + category.questions.length, 0
+    );
+    const progress = totalQuestions > 0
+      ? Math.round((submission.answeredQuestions / totalQuestions) * 100)
+      : 0;
+
+    // Group answers by category for easier display
+    const answersByCategory: Record<string, any[]> = {};
+    submission.answers.forEach((answer: any) => {
+      const categoryId = answer.question.categoryId;
+      if (!answersByCategory[categoryId]) {
+        answersByCategory[categoryId] = [];
+      }
+      answersByCategory[categoryId].push(answer);
+    });
+
+    return {
+      ...submission,
+      progress,
+      totalQuestions,
+      answeredQuestions: submission.answeredQuestions,
+      answersByCategory,
+      canContinue: submission.status === 'DRAFT' && progress < 100,
+      timeInDraft: {
+        days: Math.floor(
+          (new Date().getTime() - submission.updatedAt.getTime()) / (1000 * 60 * 60 * 24)
+        ),
+        hours: Math.floor(
+          (new Date().getTime() - submission.updatedAt.getTime()) / (1000 * 60 * 60)
+        ),
+        lastUpdated: submission.updatedAt
+      }
+    };
   }
+  ,
+  // src/modules/assessment/assessment.service.ts (add this method)
+  async removeEvidence(
+    answerId: string,
+    userId: string
+  ): Promise<AssessmentAnswer> {
+    const answer = await prisma.assessmentAnswer.findFirst({
+      where: { id: answerId },
+      include: {
+        submission: {
+          include: {
+            user: {
+              select: { id: true }
+            }
+          }
+        }
+      }
+    });
+
+    if (!answer) {
+      throw new ApiError(httpStatus.NOT_FOUND, "Answer not found");
+    }
+
+    // Check permissions
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { role: true, vendorId: true, supplierId: true }
+    });
+
+    if (!user) {
+      throw new ApiError(httpStatus.NOT_FOUND, "User not found");
+    }
+
+    const canRemove =
+      answer.submission.user.id === userId ||
+      (user.role === 'VENDOR' && answer.submission.vendorId === user.vendorId) ||
+      user.role === 'ADMIN';
+
+    if (!canRemove) {
+      throw new ApiError(httpStatus.FORBIDDEN, "You don't have permission to remove this evidence");
+    }
+
+    // Simply update the database without Cloudinary deletion
+    const updatedAnswer = await prisma.assessmentAnswer.update({
+      where: { id: answerId },
+      data: {
+        evidence: null,
+        evidenceStatus: 'PENDING'
+      }
+    });
+
+    // // Delete document record
+    // await prisma.document.deleteMany({
+    //   where: {
+    //     assessmentAnswerId: answerId as string
+    //   }
+    // });
+
+    return updatedAnswer;
+  }
+
+  // Helper method to delete from Cloudinary
+
+
 };

@@ -566,5 +566,93 @@ async getVendorProfile(vendorId: string): Promise<any> {
     // Rest of the uploadDocument implementation...
     // [Your existing uploadDocument code]
   },
+ // ========== GET SINGLE SUPPLIER PROGRESS ==========
+  async getSingleSupplierProgress(supplierId: string, vendorId: string): Promise<any> {
+    const supplier = await prisma.supplier.findFirst({
+      where: {
+        id: supplierId,
+        vendorId,
+        isDeleted: false
+      },
+      include: {
+        assessmentSubmissions: {
+          where: {
+            status: { in: ['SUBMITTED', 'UNDER_REVIEW', 'APPROVED'] }
+          },
+          include: {
+            assessment: {
+              select: {
+                title: true,
+                stage: true
+              }
+            }
+          },
+          orderBy: { submittedAt: 'desc' }
+        }
+      }
+    });
 
+    if (!supplier) {
+      throw new ApiError(httpStatus.NOT_FOUND, "Supplier not found");
+    }
+
+    // Calculate progress statistics
+    const totalAssessments = supplier.assessmentSubmissions.length;
+    const completedAssessments = supplier.assessmentSubmissions.filter(
+      sub => sub.status === 'APPROVED'
+    ).length;
+
+    // Check if all required assessments are completed
+    const initialAssessmentCompleted = supplier.assessmentSubmissions.some(
+      sub => sub.assessment.stage === 'INITIAL' && sub.status === 'APPROVED'
+    );
+    const fullAssessmentCompleted = supplier.assessmentSubmissions.some(
+      sub => sub.assessment.stage === 'FULL' && sub.status === 'APPROVED'
+    );
+
+    const isCompletedAll = initialAssessmentCompleted && fullAssessmentCompleted;
+    const progressPercent = isCompletedAll ? 100 : (totalAssessments / 2) * 100;
+
+    // Calculate BIV scores
+    let overallBIVScore = null;
+    let businessScore = null;
+    let integrityScore = null;
+    let availabilityScore = null;
+    
+    const latestApprovedSubmission = supplier.assessmentSubmissions.find(
+      sub => sub.status === 'APPROVED'
+    );
+
+    if (latestApprovedSubmission) {
+      overallBIVScore = latestApprovedSubmission.bivScore?.toNumber() || null;
+      businessScore = latestApprovedSubmission.businessScore?.toNumber() || null;
+      integrityScore = latestApprovedSubmission.integrityScore?.toNumber() || null;
+      availabilityScore = latestApprovedSubmission.availabilityScore?.toNumber() || null;
+    }
+
+    return {
+      supplierId: supplier.id,
+      supplierName: supplier.name,
+      totalAssessments,
+      completedAssessments,
+      isCompletedAll,
+      progressPercent,
+      riskLevel: supplier.riskLevel,
+      overallBIVScore,
+      businessScore,
+      integrityScore,
+      availabilityScore,
+      nis2Compliant: supplier.nis2Compliant,
+      lastAssessmentDate: supplier.lastAssessmentDate,
+      nextAssessmentDue: supplier.nextAssessmentDue,
+      assessments: supplier.assessmentSubmissions.map(sub => ({
+        id: sub.id,
+        title: sub.assessment.title,
+        stage: sub.assessment.stage,
+        status: sub.status,
+        score: sub.score?.toNumber(),
+        submittedAt: sub.submittedAt
+      }))
+    };
+  },
 };

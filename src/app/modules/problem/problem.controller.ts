@@ -6,6 +6,8 @@ import { ProblemService } from "./problem.service";
 import catchAsync from "../../shared/catchAsync";
 
 const createProblem = catchAsync(async (req: Request, res: Response) => {
+  console.log("Request Body:", req.body);
+  console.log("User Info:", req.user);
   const userId = req.user?.userId;
   
   if (!userId) {
