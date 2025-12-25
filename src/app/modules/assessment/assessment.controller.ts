@@ -180,6 +180,9 @@ const submitAssessment = catchAsync(async (req: Request, res: Response) => {
 });
 
 const reviewAssessment = catchAsync(async (req: Request, res: Response) => {
+  console.log("review hit",req.body) ;
+  console.log("req user",req.user);
+  console.log("req params", req.params)
   const userId = req.user?.userId;
   const { submissionId } = req.params;
 
@@ -284,7 +287,7 @@ const requestEvidence = catchAsync(async (req: Request, res: Response) => {
 });
 
 const getDraftSubmissionById = catchAsync(async (req: Request, res: Response) => {
-  console.log("Getting draft submission", req.params , req.user);
+  console.log("Getting draft submission", req.params, req.user);
   const userId = req.user?.userId;
   const { submissionId } = req.params;
   console.log("User IDsssssssssssssssss:", userId);
@@ -310,7 +313,7 @@ const getDraftSubmissionById = catchAsync(async (req: Request, res: Response) =>
 const removeEvidence = catchAsync(async (req: Request, res: Response) => {
   const userId = req.user?.userId;
   const { answerId } = req.params;
-  
+
   if (!userId) {
     return sendResponse(res, {
       statusCode: httpStatus.UNAUTHORIZED,
@@ -324,7 +327,7 @@ const removeEvidence = catchAsync(async (req: Request, res: Response) => {
     answerId,
     userId,
   );
-  
+
   sendResponse(res, {
     statusCode: httpStatus.OK,
     success: true,
@@ -332,6 +335,22 @@ const removeEvidence = catchAsync(async (req: Request, res: Response) => {
     data: answer
   });
 });
+
+const getSubmissionsByUserId = catchAsync(async (req: Request, res: Response) => {
+    const { userId } = req.params; // Fixed extra dot
+    const options = req.query; // For pagination, filters
+
+    const result = await AssessmentService.getSubmissionsByUserId(userId, options);
+
+    res.status(httpStatus.OK).json({
+      success: true,
+      message: "Submissions retrieved successfully",
+      meta: result.meta,
+      data: result.submissions,
+    });
+  }
+);
+
 export const AssessmentController = {
   getAssessments,
   getAssessmentById,
@@ -345,6 +364,6 @@ export const AssessmentController = {
   getAssessmentStatistics,
   requestEvidence,
   getDraftSubmissionById,
-
-  removeEvidence
+  removeEvidence ,
+  getSubmissionsByUserId
 };

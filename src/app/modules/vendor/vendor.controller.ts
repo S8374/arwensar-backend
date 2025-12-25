@@ -221,8 +221,53 @@ const getSingleSupplierProgress = catchAsync(async (req: Request, res: Response)
     data: progress
   });
 });
+const bulkImportSuppliers = catchAsync(async (req: Request & { user?: any }, res: Response) => {
+  console.log("hits the buld import")
+  const vendorId = req.user.vendorId;
+  
+  if (!vendorId) {
+    return sendResponse(res, {
+      statusCode: httpStatus.BAD_REQUEST,
+      success: false,
+      message: "Vendor ID not found in token",
+      data: null,
+    });
+  }
 
+  const result = await VendorService.bulkImportSuppliers(vendorId, req.body);
+  
+  sendResponse(res, {
+    statusCode: httpStatus.OK,
+    success: true,
+    message: `Bulk import completed: ${result.successful} successful, ${result.failed} failed`,
+    data: result,
+  });
+});
+const resendInvitation = catchAsync(async (req: Request, res: Response) => {
+  const vendorId = req.user?.vendorId;
+  const { supplierId } = req.params;
+  
+  if (!vendorId) {
+    return sendResponse(res, {
+      statusCode: httpStatus.UNAUTHORIZED,
+      success: false,
+      message: "Vendor ID not found",
+      data: null
+    });
+  }
 
+  const result = await VendorService.resendInvitation(supplierId, vendorId);
+  
+  sendResponse(res, {
+    statusCode: httpStatus.OK,
+    success: true,
+    message: result.message,
+    data: {
+      supplier: result.supplier,
+      invitationSent: result.invitationSent
+    }
+  });
+});
 export const VendorController = {
   getDashboardStats,
   getVendorProfile,
@@ -232,5 +277,7 @@ export const VendorController = {
   reviewAssessment,
   reviewEvidence,
   createSupplier,
-  getSingleSupplierProgress
+  getSingleSupplierProgress,
+  bulkImportSuppliers,
+  resendInvitation
 };

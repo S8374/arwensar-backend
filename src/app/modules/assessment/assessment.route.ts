@@ -92,20 +92,23 @@ router.get(
   auth("ADMIN", "VENDOR", "SUPPLIER"),
   AssessmentController.getAssessmentStatistics
 );
-// src/modules/assessment/assessment.route.ts
 
 router.get(
   "/submissions/drafts/:submissionId",
   auth("ADMIN", "VENDOR", "SUPPLIER"),
   AssessmentController.getDraftSubmissionById
 );
-// src/modules/assessment/assessment.route.ts (add this route)
+router.get(
+  "/user/:userId/submissions",
+  auth("ADMIN", "VENDOR", "SUPPLIER"),
+  AssessmentController.getSubmissionsByUserId
+);
+
 router.delete(
   "/evidence/:answerId",
   auth("ADMIN", "VENDOR", "SUPPLIER"),
   AssessmentController.removeEvidence
 );
-
 
 
 export const AssessmentRoutes = router;

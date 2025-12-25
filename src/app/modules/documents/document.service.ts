@@ -29,7 +29,7 @@ export interface DocumentFilters {
 }
 
 export const DocumentService = {
-    // ========== UPLOAD DOCUMENT ==========
+
     async uploadDocument(
         userId: string,
         fileUrl: string,
@@ -220,7 +220,7 @@ export const DocumentService = {
         return document;
     },
 
-    // ========== GET DOCUMENTS ==========
+
     async getDocuments(
         userId: string,
         filters: DocumentFilters = {},
@@ -249,41 +249,41 @@ export const DocumentService = {
             if (!user.vendorId) {
                 throw new ApiError(httpStatus.BAD_REQUEST, "Vendor profile not found");
             }
+
+            // Get all active supplier IDs belonging to this vendor
+            const supplierIds = await prisma.supplier.findMany({
+                where: {
+                    vendorId: user.vendorId,
+                    isDeleted: false
+                },
+                select: { id: true }
+            }).then(suppliers => suppliers.map(s => s.id));
+
             where.OR = [
                 { vendorId: user.vendorId },
-                {
-                    supplier: {
-                        vendorId: user.vendorId
-                    }
-                }
+                { supplierId: { in: supplierIds } }
             ];
         }
 
-        // Apply user-provided filters
+        // Apply user-provided filters (these can override or combine with the role-based where)
         if (filters.supplierId) {
             where.supplierId = filters.supplierId;
         }
-
         if (filters.vendorId) {
             where.vendorId = filters.vendorId;
         }
-
         if (filters.category) {
             where.category = filters.category;
         }
-
         if (filters.type) {
             where.type = filters.type;
         }
-
         if (filters.status) {
             where.status = filters.status;
         }
-
         if (filters.uploadedById) {
             where.uploadedById = filters.uploadedById;
         }
-
         if (filters.search) {
             where.OR = [
                 { name: { contains: filters.search, mode: 'insensitive' } },
@@ -291,12 +291,10 @@ export const DocumentService = {
                 { type: { contains: filters.search, mode: 'insensitive' } }
             ];
         }
-
         if (filters.expiredOnly) {
             where.expiryDate = { lt: new Date() };
             where.status = { not: 'EXPIRED' };
         }
-
         if (filters.expiringSoon) {
             const thirtyDaysFromNow = new Date();
             thirtyDaysFromNow.setDate(thirtyDaysFromNow.getDate() + 30);
@@ -329,11 +327,9 @@ export const DocumentService = {
                     accessRoles: true,
                     createdAt: true,
                     updatedAt: true,
-
-                    supplierId: true,     // Still available
-                    vendorId: true,       // Still available
+                    supplierId: true,
+                    vendorId: true,
                     uploadedById: true,
-
                     uploadedBy: {
                         select: {
                             id: true,
@@ -361,7 +357,124 @@ export const DocumentService = {
         };
     },
 
-    // ========== GET DOCUMENT BY ID ==========
+
+    async getDocumentStatistics(userId: string, supplierId?: string): Promise<DocumentStats> {
+        const user = await prisma.user.findUnique({
+            where: { id: userId },
+            select: { role: true, vendorId: true, supplierId: true }
+        });
+
+        if (!user) {
+            throw new ApiError(httpStatus.NOT_FOUND, "User not found");
+        }
+
+        const where: any = {};
+
+        if (user.role === 'SUPPLIER') {
+            if (!user.supplierId) {
+                throw new ApiError(httpStatus.BAD_REQUEST, "Supplier profile not found");
+            }
+            where.supplierId = user.supplierId;
+        } else if (user.role === 'VENDOR') {
+            if (supplierId) {
+                // Check if supplier belongs to vendor
+                const supplier = await prisma.supplier.findFirst({
+                    where: {
+                        id: supplierId,
+                        vendorId: user.vendorId as string,
+                        isDeleted: false
+                    }
+                });
+                if (!supplier) {
+                    throw new ApiError(httpStatus.FORBIDDEN, "Supplier not found or doesn't belong to you");
+                }
+                where.supplierId = supplierId;
+            } else {
+                if (!user.vendorId) {
+                    throw new ApiError(httpStatus.BAD_REQUEST, "Vendor profile not found");
+                }
+
+                // Get all active supplier IDs belonging to this vendor
+                const supplierIds = await prisma.supplier.findMany({
+                    where: {
+                        vendorId: user.vendorId,
+                        isDeleted: false
+                    },
+                    select: { id: true }
+                }).then(suppliers => suppliers.map(s => s.id));
+
+                where.OR = [
+                    { vendorId: user.vendorId },
+                    { supplierId: { in: supplierIds } }
+                ];
+            }
+        }
+
+        const [
+            total,
+            byStatus,
+            byCategory,
+            expiringSoon,
+            expired,
+            pendingReview
+        ] = await Promise.all([
+            prisma.document.count({ where }),
+            prisma.document.groupBy({
+                by: ['status'],
+                where,
+                _count: { _all: true }
+            }),
+            prisma.document.groupBy({
+                by: ['category'],
+                where,
+                _count: { _all: true }
+            }),
+            prisma.document.count({
+                where: {
+                    ...where,
+                    expiryDate: {
+                        gte: new Date(),
+                        lte: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000) // +30 days
+                    },
+                    status: { not: 'EXPIRED' }
+                }
+            }),
+            prisma.document.count({
+                where: {
+                    ...where,
+                    expiryDate: { lt: new Date() },
+                    status: { not: 'EXPIRED' }
+                }
+            }),
+            prisma.document.count({
+                where: {
+                    ...where,
+                    status: { in: ['PENDING', 'UNDER_REVIEW'] }
+                }
+            })
+        ]);
+
+        const statusStats: Record<string, number> = {};
+        byStatus.forEach(item => {
+            statusStats[item.status] = item._count._all;
+        });
+
+        const categoryStats: Record<string, number> = {};
+        byCategory.forEach(item => {
+            categoryStats[item.category || 'UNCATEGORIZED'] = item._count._all;
+        });
+
+        return {
+            total,
+            byStatus: statusStats,
+            byCategory: categoryStats,
+            expiringSoon,
+            expired,
+            pendingReview
+        };
+    },
+
+
     async getDocumentById(documentId: string, userId: string): Promise<Document> {
         // Fetch the document with only valid relations and needed scalar fields
         const document = await prisma.document.findUnique({
@@ -479,8 +592,7 @@ export const DocumentService = {
         return enrichedDocument as Document;
     },
 
-    // ========== UPDATE DOCUMENT ==========
-    // In your document.service.ts, fix the updateDocument method:
+
     async updateDocument(
         documentId: string,
         userId: string,
@@ -554,7 +666,7 @@ export const DocumentService = {
         return updatedDocument;
     }
     ,
-    // ========== REVIEW DOCUMENT ==========
+
     async reviewDocument(
         documentId: string,
         reviewerId: string,
@@ -714,7 +826,7 @@ export const DocumentService = {
         return updatedDocument as unknown as Document;
     },
 
-    // ========== DELETE DOCUMENT ==========
+
     async deleteDocument(documentId: string, userId: string): Promise<{ message: string }> {
         const document = await prisma.document.findUnique({
             where: { id: documentId }
@@ -753,113 +865,9 @@ export const DocumentService = {
         };
     },
 
-    // ========== GET DOCUMENT STATISTICS ==========
-    async getDocumentStatistics(userId: string, supplierId?: string): Promise<DocumentStats> {
-        const user = await prisma.user.findUnique({
-            where: { id: userId },
-            select: { role: true, vendorId: true, supplierId: true }
-        });
 
-        if (!user) {
-            throw new ApiError(httpStatus.NOT_FOUND, "User not found");
-        }
 
-        const where: any = {};
 
-        if (user.role === 'SUPPLIER') {
-            where.supplierId = user.supplierId;
-        } else if (user.role === 'VENDOR') {
-            if (supplierId) {
-                // Check if supplier belongs to vendor
-                const supplier = await prisma.supplier.findFirst({
-                    where: {
-                        id: supplierId,
-                        vendorId: user.vendorId as string,
-                        isDeleted: false
-                    }
-                });
-
-                if (!supplier) {
-                    throw new ApiError(httpStatus.FORBIDDEN, "Supplier not found or doesn't belong to you");
-                }
-                where.supplierId = supplierId;
-            } else {
-                where.OR = [
-                    { vendorId: user.vendorId },
-                    {
-                        supplier: {
-                            vendorId: user.vendorId
-                        }
-                    }
-                ];
-            }
-        }
-
-        const [
-            total,
-            byStatus,
-            byCategory,
-            expiringSoon,
-            expired,
-            pendingReview
-        ] = await Promise.all([
-            prisma.document.count({ where }),
-            prisma.document.groupBy({
-                by: ['status'],
-                where,
-                _count: true
-            }),
-            prisma.document.groupBy({
-                by: ['category'],
-                where,
-                _count: true
-            }),
-            prisma.document.count({
-                where: {
-                    ...where,
-                    expiryDate: {
-                        gte: new Date(),
-                        lte: new Date(new Date().setDate(new Date().getDate() + 30))
-                    },
-                    status: { not: 'EXPIRED' }
-                }
-            }),
-            prisma.document.count({
-                where: {
-                    ...where,
-                    expiryDate: { lt: new Date() },
-                    status: { not: 'EXPIRED' }
-                }
-            }),
-            prisma.document.count({
-                where: {
-                    ...where,
-                    status: { in: ['PENDING', 'UNDER_REVIEW'] }
-                }
-            })
-        ]);
-
-        const statusStats: Record<string, number> = {};
-        byStatus.forEach(item => {
-            statusStats[item.status] = item._count;
-        });
-
-        const categoryStats: Record<string, number> = {};
-        byCategory.forEach(item => {
-            categoryStats[item.category || 'UNCATEGORIZED'] = item._count;
-        });
-
-        return {
-            total,
-            byStatus: statusStats,
-            byCategory: categoryStats,
-            expiringSoon,
-            expired,
-            pendingReview
-        };
-    },
-
-    // ========== GET DOCUMENT CATEGORIES ==========
     async getDocumentCategories(): Promise<string[]> {
         const categories = await prisma.document.findMany({
             select: {
@@ -874,7 +882,7 @@ export const DocumentService = {
         return categories.map(c => c.category || 'OTHER');
     },
 
-    // ========== GET EXPIRING DOCUMENTS ==========
+
     async getExpiringDocuments(userId: string, days: number = 30): Promise<Document[]> {
         const user = await prisma.user.findUnique({
             where: { id: userId },
@@ -955,7 +963,7 @@ export const DocumentService = {
         return documentsWithRelations;
     },
 
-    // ========== BULK UPDATE DOCUMENT STATUS ==========
+
     async bulkUpdateDocumentStatus(
         userId: string,
         documentIds: string[],
@@ -1012,7 +1020,6 @@ export const DocumentService = {
         };
     },
 
-    // ========== CHECK EXPIRED DOCUMENTS ==========
     async checkExpiredDocuments(): Promise<{ message: string; count: number }> {
         const expiredDocuments = await prisma.document.findMany({
             where: {
@@ -1087,5 +1094,112 @@ export const DocumentService = {
             message: `${count} documents marked as expired`,
             count
         };
+    },
+
+    async getMyDocuments(userId: string): Promise<Document[]> {
+        const user = await prisma.user.findUnique({
+            where: { id: userId },
+            select: { role: true, vendorId: true, supplierId: true }
+        });
+
+        if (!user) {
+            throw new ApiError(httpStatus.NOT_FOUND, "User not found");
+        }
+
+        const where: any = {};
+
+        if (user.role === 'SUPPLIER') {
+            if (!user.supplierId) {
+                throw new ApiError(httpStatus.BAD_REQUEST, "Supplier profile not found");
+            }
+            where.supplierId = user.supplierId;
+        }
+        else if (user.role === 'VENDOR') {
+            if (!user.vendorId) {
+                throw new ApiError(httpStatus.BAD_REQUEST, "Vendor profile not found");
+            }
+
+            // Vendor sees: documents directly uploaded to them + all from their suppliers
+            const supplierIds = await prisma.supplier.findMany({
+                where: { vendorId: user.vendorId, isDeleted: false },
+                select: { id: true }
+            }).then(suppliers => suppliers.map(s => s.id));
+
+            where.OR = [
+                { vendorId: user.vendorId },
+                { supplierId: { in: supplierIds } }
+            ];
+        }
+        else if (user.role === 'ADMIN') {
+            // Admin sees everything (optional: limit or filter later)
+            // where = {} → all documents
+        }
+        else {
+            throw new ApiError(httpStatus.FORBIDDEN, "Unauthorized role");
+        }
+
+        const documents = await prisma.document.findMany({
+            where,
+            select: {
+                id: true,
+                name: true,
+                type: true,
+                url: true,
+                fileSize: true,
+                mimeType: true,
+                description: true,
+                category: true,
+                expiryDate: true,
+                status: true,
+                reviewedAt: true,
+                reviewNotes: true,
+                isVerified: true,
+                isPrivate: true,
+                createdAt: true,
+                updatedAt: true,
+                supplierId: true,
+                vendorId: true,
+                uploadedById: true,
+                uploadedBy: {
+                    select: {
+                        id: true,
+                        email: true,
+                        role: true,
+                        profileImage: true
+                    }
+                }
+            },
+            orderBy: { createdAt: 'desc' }
+        });
+
+        // Enrich with supplier/vendor names (optional, for better UX)
+        const enriched = await Promise.all(
+            documents.map(async (doc) => {
+                let supplier = null;
+                let vendor = null;
+
+                if (doc.supplierId) {
+                    supplier = await prisma.supplier.findUnique({
+                        where: { id: doc.supplierId },
+                        select: { id: true, name: true, email: true }
+                    });
+                }
+
+                if (doc.vendorId) {
+                    vendor = await prisma.vendor.findUnique({
+                        where: { id: doc.vendorId },
+                        select: { id: true, companyName: true }
+                    });
+                }
+
+                return {
+                    ...doc,
+                    supplier,
+                    vendor
+                };
+            })
+        );
+
+        return enriched as unknown as Document[];
     }
 };

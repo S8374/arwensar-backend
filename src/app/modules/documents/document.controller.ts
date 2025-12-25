@@ -5,6 +5,7 @@ import httpStatus from "http-status";
 import { DocumentService } from "./document.service";
 import { prisma } from "../../shared/prisma";
 import catchAsync from "../../shared/catchAsync";
+import ApiError from "../../../error/ApiError";
 
 const uploadDocument = catchAsync(async (req: Request, res: Response) => {
     console.log("Request Body:", req.body);
@@ -88,7 +89,8 @@ const getDocuments = catchAsync(async (req: Request, res: Response) => {
 const getDocumentById = catchAsync(async (req: Request, res: Response) => {
     const userId = req.user?.userId;
     const { documentId } = req.params;
-
+   console.log("userId", userId);
+   console.log("documentId",documentId);
     if (!userId) {
         return sendResponse(res, {
             statusCode: httpStatus.UNAUTHORIZED,
@@ -136,7 +138,9 @@ const updateDocument = catchAsync(async (req: Request, res: Response) => {
 const reviewDocument = catchAsync(async (req: Request, res: Response) => {
     const userId = req.user?.userId;
     const { documentId } = req.params;
-
+   console.log("req", req.body);
+   console.log("userId",userId);
+    console.log("documentId",documentId)
     if (!userId) {
         return sendResponse(res, {
             statusCode: httpStatus.UNAUTHORIZED,
@@ -319,7 +323,22 @@ const checkExpiredDocuments = catchAsync(async (req: Request, res: Response) => 
         }
     });
 });
+// document.controller.ts
+const getMyDocuments = catchAsync(async (req: Request, res: Response) => {
+  const userId = req.user?.userId;
+  if (!userId) {
+    throw new ApiError(httpStatus.UNAUTHORIZED, "Unauthorized");
+  }
 
+  const documents = await DocumentService.getMyDocuments(userId);
+
+  sendResponse(res, {
+    statusCode: httpStatus.OK,
+    success: true,
+    message: "Your documents retrieved successfully",
+    data: documents,
+  });
+});
 export const DocumentController = {
     uploadDocument,
     getDocuments,
@@ -331,5 +350,6 @@ export const DocumentController = {
     getDocumentCategories,
     getExpiringDocuments,
     bulkUpdateDocumentStatus,
-    checkExpiredDocuments
+    checkExpiredDocuments ,
+    getMyDocuments
 };

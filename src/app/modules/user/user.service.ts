@@ -8,58 +8,58 @@ import ApiError from "../../../error/ApiError";
 
 export const UserService = {
   // ========== GET USER PROFILE ==========
-// src/modules/user/user.service.ts
-async getUserProfile(userId: string): Promise<User & { vendor?: any; supplier?: any; subscription?: any }> {
-  const user = await prisma.user.findUnique({
-    where: { id: userId },
-    include: {
-      vendorProfile: {
-        include: {
-          user: {
-            include: {
-              subscription: {
-                include: {
-                  plan: true
+  // src/modules/user/user.service.ts
+  async getUserProfile(userId: string): Promise<User & { vendor?: any; supplier?: any; subscription?: any }> {
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      include: {
+        vendorProfile: {
+          include: {
+            user: {
+              include: {
+                subscription: {
+                  include: {
+                    plan: true
+                  }
                 }
               }
             }
           }
-        }
-      },
-      supplierProfile: {
-        include: {
-          vendor: {
-            select: {
-              id: true,
-              companyName: true
+        },
+        supplierProfile: {
+          include: {
+            vendor: {
+              select: {
+                id: true,
+                companyName: true
+              }
             }
           }
-        }
-      },
-      subscription: {
-        include: {
-          plan: true
-        }
-      },
-      notificationPreferences: true
+        },
+        subscription: {
+          include: {
+            plan: true
+          }
+        },
+        notificationPreferences: true
+      }
+    });
+
+    if (!user) {
+      throw new ApiError(httpStatus.NOT_FOUND, "User not found");
     }
-  });
 
-  if (!user) {
-    throw new ApiError(httpStatus.NOT_FOUND, "User not found");
-  }
+    // Transform the response to include subscription in vendorProfile
+    const transformedUser = {
+      ...user,
+      vendorProfile: user.vendorProfile ? {
+        ...user.vendorProfile,
+        subscription: user.subscription
+      } : undefined
+    };
 
-  // Transform the response to include subscription in vendorProfile
-  const transformedUser = {
-    ...user,
-    vendorProfile: user.vendorProfile ? {
-      ...user.vendorProfile,
-      subscription: user.subscription
-    } : undefined
-  };
-
-  return transformedUser;
-},
+    return transformedUser;
+  },
 
   // ========== UPDATE USER PROFILE ==========
   async updateUserProfile(userId: string, data: any): Promise<User> {
@@ -72,7 +72,7 @@ async getUserProfile(userId: string): Promise<User & { vendor?: any; supplier?: 
     }
 
     const updateData: any = {};
-    
+
     if (data.firstName || data.lastName) {
       updateData.vendorProfile = {
         update: {
@@ -195,66 +195,43 @@ async getUserProfile(userId: string): Promise<User & { vendor?: any; supplier?: 
   },
 
   // ========== UPDATE NOTIFICATION PREFERENCES ==========
-// ========== UPDATE NOTIFICATION PREFERENCES ==========
-async updateNotificationPreferences(userId: string, data: any): Promise<NotificationPreferences> {
-  console.log("🔍 Update Notification Preferences Called");
-  console.log("📨 Request Data:", data);
-  console.log("👤 User ID:", userId);
+  // ========== UPDATE NOTIFICATION PREFERENCES ==========
+  async updateNotificationPreferences(
+    userId: string,
+    payload: any
+  ): Promise<NotificationPreferences> {
 
-  // Get current preferences
-  const preferences = await prisma.notificationPreferences.findUnique({
-    where: { userId }
-  });
+    const cleanData: any = {
+      emailNotifications: payload.emailNotifications,
+      pushNotifications: payload.pushNotifications,
+      riskAlerts: payload.riskAlerts,
+      contractReminders: payload.contractReminders,
+      complianceUpdates: payload.complianceUpdates,
+      assessmentReminders: payload.assessmentReminders,
+      problemAlerts: payload.problemAlerts,
+      reportAlerts: payload.reportAlerts,
+      paymentAlerts: payload.paymentAlerts,
+      messageAlerts: payload.messageAlerts,
+      digestFrequency: payload.digestFrequency,
+      quietHoursStart: payload.quietHoursStart,
+      quietHoursEnd: payload.quietHoursEnd,
+    };
 
-  console.log("📋 Existing Preferences:", preferences);
+    // remove undefined fields
+    Object.keys(cleanData).forEach(
+      key => cleanData[key] === undefined && delete cleanData[key]
+    );
 
-  if (!preferences) {
-    console.log("📝 Creating new preferences for user");
-    return prisma.notificationPreferences.create({
-      data: { userId, ...data }
+    return prisma.notificationPreferences.upsert({
+      where: { userId },
+      create: {
+        userId,
+        ...cleanData
+      },
+      update: cleanData
     });
   }
-
-  // Prepare update data - map all possible fields
-  const updateData: any = {
-    emailNotifications: data.emailNotifications !== undefined ? data.emailNotifications : preferences.emailNotifications,
-    pushNotifications: data.pushNotifications !== undefined ? data.pushNotifications : preferences.pushNotifications,
-    riskAlerts: data.riskAlerts !== undefined ? data.riskAlerts : preferences.riskAlerts,
-    contractReminders: data.contractReminders !== undefined ? data.contractReminders : preferences.contractReminders,
-    complianceUpdates: data.complianceUpdates !== undefined ? data.complianceUpdates : preferences.complianceUpdates,
-    assessmentReminders: data.assessmentReminders !== undefined ? data.assessmentReminders : preferences.assessmentReminders,
-    problemAlerts: data.problemAlerts !== undefined ? data.problemAlerts : preferences.problemAlerts,
-    reportAlerts: data.reportAlerts !== undefined ? data.reportAlerts : preferences.reportAlerts,
-    paymentAlerts: data.paymentAlerts !== undefined ? data.paymentAlerts : preferences.paymentAlerts,
-    messageAlerts: data.messageAlerts !== undefined ? data.messageAlerts : preferences.messageAlerts,
-    digestFrequency: data.digestFrequency || preferences.digestFrequency,
-    quietHoursStart: data.quietHoursStart !== undefined ? data.quietHoursStart : preferences.quietHoursStart,
-    quietHoursEnd: data.quietHoursEnd !== undefined ? data.quietHoursEnd : preferences.quietHoursEnd,
-    updatedAt: new Date()
-  };
-
-  console.log("🔄 Update Data Prepared:", updateData);
-
-  const updatedPreferences = await prisma.notificationPreferences.update({
-    where: { userId },
-    data: updateData
-  });
-
-  console.log("✅ Updated Preferences:", updatedPreferences);
-  
-  // Create activity log
-  await prisma.activityLog.create({
-    data: {
-      userId,
-      action: "UPDATE_NOTIFICATION_PREFERENCES",
-      entityType: "USER",
-      entityId: userId,
-      details: { updatedFields: Object.keys(data) }
-    }
-  });
-
-  return updatedPreferences;
-},
+  ,
 
   // ========== GET ACTIVITY LOGS ==========
   async getActivityLogs(userId: string, options: any = {}) {
@@ -371,7 +348,7 @@ async updateNotificationPreferences(userId: string, data: any): Promise<Notifica
       documents
     };
   }
-,
+  ,
 
 
 };

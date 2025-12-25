@@ -1,9 +1,13 @@
 // src/modules/vendor/vendor.service.ts
-import { Vendor, Supplier, AssessmentSubmission, Criticality } from "@prisma/client";
+import { Vendor, Supplier, AssessmentSubmission, Criticality, InvitationStatus } from "@prisma/client";
 import { prisma } from "../../shared/prisma";
 import httpStatus from "http-status";
 import ApiError from "../../../error/ApiError";
 import { calculateBIVScore } from "../../../logic/bivRiskCalculator";
+import { mailtrapService } from "../../shared/mailtrap.service";
+import { jwtHelper } from "../../helper/jwtHelper";
+import { config } from "../../../config";
+import { BulkImportResult, BulkImportSuppliersInput } from "./vendor.types";
 
 export interface VendorDashboardStats {
   totalSuppliers: number;
@@ -169,7 +173,7 @@ export const VendorService = {
   },
 
   // ========== PROFILE MANAGEMENT ==========
-async getVendorProfile(vendorId: string): Promise<any> {
+  async getVendorProfile(vendorId: string): Promise<any> {
     const vendor = await prisma.vendor.findUnique({
       where: { id: vendorId },
       include: {
@@ -226,7 +230,7 @@ async getVendorProfile(vendorId: string): Promise<any> {
       notificationPreferences: vendor.user.notificationPreferences
     };
   },
-  
+
 
   async updateVendorProfile(vendorId: string, data: any): Promise<Vendor> {
     const vendor = await prisma.vendor.findUnique({
@@ -368,13 +372,17 @@ async getVendorProfile(vendorId: string): Promise<any> {
 
     // Calculate statistics
     const totalSubmissions = supplier.assessmentSubmissions.length;
+    const totalAssessments = await prisma.assessment.count({
+      where: {
+        isActive: true
+      }
+    });
     const pendingSubmissions = supplier.assessmentSubmissions.filter(
-      sub => sub.status === 'SUBMITTED' || sub.status === 'UNDER_REVIEW'
+      sub => sub.status === 'PENDING' || sub.status === 'UNDER_REVIEW'
     ).length;
     const approvedSubmissions = supplier.assessmentSubmissions.filter(
       sub => sub.status === 'APPROVED'
     ).length;
-
     const averageScore = supplier.assessmentSubmissions.length > 0 ?
       supplier.assessmentSubmissions.reduce((acc, sub) =>
         acc + (sub.score?.toNumber() || 0), 0
@@ -386,8 +394,9 @@ async getVendorProfile(vendorId: string): Promise<any> {
         totalSubmissions,
         pendingSubmissions,
         approvedSubmissions,
+        totalAssessments,
         averageScore: parseFloat(averageScore.toFixed(2)),
-        totalAssessments: totalSubmissions
+
       }
     };
   },
@@ -561,12 +570,12 @@ async getVendorProfile(vendorId: string): Promise<any> {
   ) {
     const fileSizeMB = file.size / (1024 * 1024); // Convert bytes to MB
 
-  
+
 
     // Rest of the uploadDocument implementation...
     // [Your existing uploadDocument code]
   },
- // ========== GET SINGLE SUPPLIER PROGRESS ==========
+  // ========== GET SINGLE SUPPLIER PROGRESS ==========
   async getSingleSupplierProgress(supplierId: string, vendorId: string): Promise<any> {
     const supplier = await prisma.supplier.findFirst({
       where: {
@@ -618,7 +627,7 @@ async getVendorProfile(vendorId: string): Promise<any> {
     let businessScore = null;
     let integrityScore = null;
     let availabilityScore = null;
-    
+
     const latestApprovedSubmission = supplier.assessmentSubmissions.find(
       sub => sub.status === 'APPROVED'
     );
@@ -655,4 +664,278 @@ async getVendorProfile(vendorId: string): Promise<any> {
       }))
     };
   },
+  // ========== BULK IMPORT SUPPLIERS ==========
+  async bulkImportSuppliers(
+    vendorId: string,
+    payload: BulkImportSuppliersInput
+  ): Promise<BulkImportResult> {
+    // Check if vendor exists
+    const vendor = await prisma.vendor.findUnique({
+      where: { id: vendorId },
+      include: {
+        user: { select: { email: true } }
+      }
+    });
+
+    if (!vendor) {
+      throw new ApiError(httpStatus.NOT_FOUND, "Vendor not found");
+    }
+
+    const results: BulkImportResult['results'] = [];
+    let successful = 0;
+    let failed = 0;
+
+    // Use transaction for better performance and consistency
+    for (const supplierData of payload.suppliers) {
+      try {
+        // Check if supplier email already exists
+        const existingSupplier = await prisma.supplier.findUnique({
+          where: { email: supplierData.email.toLowerCase() }
+        });
+
+        if (existingSupplier) {
+          results.push({
+            supplier: supplierData,
+            success: false,
+            message: "Supplier with this email already exists",
+          });
+          failed++;
+          continue;
+        }
+
+        // Generate invitation token
+        const invitationToken = jwtHelper.generateToken(
+          {
+            email: supplierData.email.toLowerCase(),
+            vendorId,
+            type: 'supplier_invitation'
+          },
+          config.jwt.jwt_secret as string,
+          '7d'
+        );
+
+        // Prepare supplier data
+        const supplierCreateData = {
+          name: supplierData.name,
+          contactPerson: supplierData.contactPerson,
+          email: supplierData.email.toLowerCase(),
+          phone: supplierData.phone || "",
+          category: supplierData.category,
+          criticality: supplierData.criticality as Criticality,
+          contractStartDate: new Date(supplierData.contractStartDate),
+          contractEndDate: supplierData.contractEndDate ? new Date(supplierData.contractEndDate) : null,
+          vendorId,
+          invitationToken,
+          invitationSentAt: new Date(),
+          invitationStatus: InvitationStatus.SENT,
+          isActive: false
+        };
+
+        // Create supplier
+        const supplier = await prisma.supplier.create({
+          data: supplierCreateData,
+          include: {
+            vendor: {
+              select: {
+                companyName: true,
+                firstName: true,
+                lastName: true
+              }
+            }
+          }
+        });
+
+        // Send invitation email
+        let invitationSent = false;
+        try {
+          await mailtrapService.sendHtmlEmail({
+            to: supplierData.email.toLowerCase(),
+            subject: `Invitation to Join ${vendor.companyName} on CyberNark`,
+            html: `
+            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+              <h2 style="color: #333;">You're Invited to Join CyberNark!</h2>
+              <p>${vendor.firstName} ${vendor.lastName} from <strong>${vendor.companyName}</strong> has invited you to join their supplier network on CyberNark.</p>
+              
+              <div style="background-color: #f8f9fa; padding: 20px; border-radius: 5px; margin: 20px 0;">
+                <h3 style="margin-top: 0;">Supplier Details:</h3>
+                <p><strong>Name:</strong> ${supplierData.name}</p>
+                <p><strong>Contact Person:</strong> ${supplierData.contactPerson}</p>
+                <p><strong>Category:</strong> ${supplierData.category}</p>
+                <p><strong>Criticality:</strong> ${supplierData.criticality}</p>
+                ${supplierData.contractStartDate ? `<p><strong>Contract Start:</strong> ${new Date(supplierData.contractStartDate).toLocaleDateString()}</p>` : ''}
+                ${supplierData.contractEndDate ? `<p><strong>Contract End:</strong> ${new Date(supplierData.contractEndDate).toLocaleDateString()}</p>` : ''}
+              </div>
+              
+              <p>To complete your registration and access the platform, please click the button below:</p>
+              
+              <div style="text-align: center; margin: 30px 0;">
+                <a href="${config.APP.WEBSITE}/supplier/register?token=${invitationToken}" style="background-color: #007bff; color: white; padding: 12px 30px; text-decoration: none; border-radius: 5px; font-weight: bold;">
+                  Complete Registration
+                </a>
+              </div>
+              
+              <p style="color: #666; font-size: 14px;">
+                <strong>Note:</strong> This invitation link will expire in 7 days. If you have any questions, please contact ${vendor.companyName} directly.
+              </p>
+              
+              <hr style="border: none; border-top: 1px solid #eee; margin: 20px 0;">
+              <p style="color: #666; font-size: 12px;">© ${new Date().getFullYear()} CyberNark. All rights reserved.</p>
+            </div>
+          `
+          });
+          invitationSent = true;
+        } catch (emailError) {
+          console.error(`Failed to send email to ${supplierData.email}:`, emailError);
+          // Continue even if email fails - supplier is created
+        }
+
+        results.push({
+          supplier: supplierData,
+          success: true,
+          message: "Supplier created successfully",
+          invitationSent,
+        });
+        successful++;
+
+      } catch (error: any) {
+        console.error(`Error creating supplier ${supplierData.email}:`, error);
+        results.push({
+          supplier: supplierData,
+          success: false,
+          message: error.message || "Failed to create supplier",
+        });
+        failed++;
+      }
+    }
+
+    return {
+      total: payload.suppliers.length,
+      successful,
+      failed,
+      results,
+    };
+  },
+  async resendInvitation(
+    supplierId: string,
+    vendorId: string
+  ): Promise<{ supplier: Supplier; invitationSent: boolean; message: string }> {
+    // Check if vendor exists
+    const vendor = await prisma.vendor.findUnique({
+      where: { id: vendorId },
+      include: {
+        user: {
+          select: { email: true }
+        }
+      }
+    });
+
+    if (!vendor) {
+      throw new ApiError(httpStatus.NOT_FOUND, "Vendor not found");
+    }
+
+    // Check if supplier exists and belongs to vendor
+    const supplier = await prisma.supplier.findFirst({
+      where: {
+        id: supplierId,
+        vendorId: vendorId,
+        isDeleted: false,
+        invitationStatus: {
+          in: [InvitationStatus.PENDING, InvitationStatus.SENT, InvitationStatus.EXPIRED]
+        }
+      }
+    });
+
+    if (!supplier) {
+      throw new ApiError(
+        httpStatus.NOT_FOUND,
+        "Supplier not found or invitation already accepted"
+      );
+    }
+
+    // Check if supplier is already active (has user account)
+    if (supplier.isActive) {
+      throw new ApiError(
+        httpStatus.BAD_REQUEST,
+        "Supplier is already active and has an account"
+      );
+    }
+
+    // Generate new invitation token
+    const invitationToken = jwtHelper.generateToken(
+      {
+        email: supplier.email,
+        vendorId: vendorId,
+        type: 'supplier_invitation'
+      },
+      config.jwt.jwt_secret as string,
+      '7d' // Token valid for 7 days
+    );
+
+    const result = await prisma.$transaction(async (tx) => {
+      // Update supplier with new token
+      const updatedSupplier = await tx.supplier.update({
+        where: { id: supplierId },
+        data: {
+          invitationToken: invitationToken,
+          invitationSentAt: new Date(),
+          invitationStatus: InvitationStatus.SENT,
+          // Reset invitation accepted fields
+          invitationAcceptedAt: null
+        }
+      });
+
+      return updatedSupplier;
+    });
+
+    // Send invitation email
+    try {
+      await mailtrapService.sendHtmlEmail({
+        to: supplier.email,
+        subject: `Invitation Reminder from ${vendor.companyName} on CyberNark`,
+        html: `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+          <h2 style="color: #333;">Invitation Reminder - Join CyberNark!</h2>
+          <p>This is a reminder that ${vendor.firstName || ''} ${vendor.lastName || ''} from 
+          <strong>${vendor.companyName}</strong> has invited you to join their supplier network on CyberNark.</p>
+          
+          <div style="background-color: #f8f9fa; padding: 20px; border-radius: 5px; margin: 20px 0;">
+            <h3 style="margin-top: 0;">Supplier Details:</h3>
+            <p><strong>Name:</strong> ${supplier.name}</p>
+            <p><strong>Contact Person:</strong> ${supplier.contactPerson}</p>
+            <p><strong>Category:</strong> ${supplier.category}</p>
+            <p><strong>Criticality:</strong> ${supplier.criticality}</p>
+          </div>
+          
+          <p>To complete your registration and access the platform, please click the button below:</p>
+          
+          <div style="text-align: center; margin: 30px 0;">
+            <a href="${config.APP.WEBSITE}/supplier/register?token=${invitationToken}" style="background-color: #007bff; color: white; padding: 12px 30px; text-decoration: none; border-radius: 5px; font-weight: bold;">
+              Complete Registration
+            </a>
+          </div>
+          
+          <p style="color: #666; font-size: 14px;">
+            <strong>Note:</strong> This invitation link will expire in 7 days. If you have already registered, please ignore this email.
+          </p>
+          
+          <hr style="border: none; border-top: 1px solid #eee; margin: 20px 0;">
+          <p style="color: #666; font-size: 12px;">© ${new Date().getFullYear()} CyberNark. All rights reserved.</p>
+        </div>
+      `
+      });
+
+      return {
+        supplier: result,
+        invitationSent: true,
+        message: "Invitation resent successfully"
+      };
+    } catch (emailError) {
+      console.error("Failed to resend invitation email:", emailError);
+      return {
+        supplier: result,
+        invitationSent: false,
+        message: "Invitation updated but failed to send email"
+      };
+    }
+  }
 };

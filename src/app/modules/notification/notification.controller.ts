@@ -4,6 +4,7 @@ import sendResponse from "../../shared/sendResponse";
 import httpStatus from "http-status";
 import { NotificationService } from "./notification.service";
 import catchAsync from "../../shared/catchAsync";
+import ApiError from "../../../error/ApiError";
 
 const getNotifications = catchAsync(async (req: Request, res: Response) => {
   const userId = req.user?.userId;
@@ -140,12 +141,51 @@ const clearAllNotifications = catchAsync(async (req: Request, res: Response) => 
     data: { count: result.count }
   });
 });
+const createNotification = catchAsync(async (req: Request, res: Response) => {
+  const userId = req.user?.userId; // Assuming auth middleware sets req.user
 
+  if (!userId) {
+    throw new ApiError(httpStatus.UNAUTHORIZED, 'Unauthorized');
+  }
+
+  const payload = {
+    ...req.body,
+    // receiverId is the user who will receive the notification
+    userId: req.body.receiverId || req.body.userId,
+  };
+
+  const notification = await NotificationService.createNotification(payload);
+
+  sendResponse(res, {
+    statusCode: httpStatus.CREATED,
+    success: true,
+    message: 'Notification sent successfully',
+    data: notification,
+  });
+});
+const getTargetUsers = catchAsync(async (req: Request, res: Response) => {
+  const userId = req.user?.userId;
+
+  if (!userId) {
+    throw new ApiError(httpStatus.UNAUTHORIZED, 'Unauthorized access');
+  }
+
+  const targetUsers = await NotificationService.getTargetUsers(userId);
+
+  sendResponse(res, {
+    statusCode: httpStatus.OK,
+    success: true,
+    message: 'Target users retrieved successfully',
+    data: targetUsers,
+  });
+});
 export const NotificationController = {
   getNotifications,
   getNotificationStats,
   markAsRead,
   deleteNotifications,
   getUnreadCount,
-  clearAllNotifications
+  clearAllNotifications ,
+  createNotification,
+  getTargetUsers
 };

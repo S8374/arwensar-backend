@@ -1,61 +1,83 @@
-// src/modules/report/report.route.ts
-import express from "express";
-import { ReportController } from "./report.controller";
-import { generateReportSchema, updateReportSchema } from "./report.constant";
-import auth from "../../middlewares/auth";
-import validateRequest from "../../middlewares/validateRequest";
+// src/modules/report/report.routes.ts
+import express from 'express';
+import auth from '../../middlewares/auth';
+import validateRequest from '../../middlewares/validateRequest';
+import { ReportController } from './report.controller';
+import { reportValidation } from './report.constant';
 
 const router = express.Router();
 
-// Generate report
+// All routes require authentication
+router.use(auth());
+
+// ========== VENDOR-SPECIFIC ROUTES ==========
+router.get(
+  '/vendor/options',
+  ReportController.getVendorReportOptions
+);
+
+
+
+// ========== MAIN REPORT ROUTES ==========
 router.post(
-  "/",
-  auth("ADMIN", "VENDOR"),
-  validateRequest(generateReportSchema),
+  '/',
+  validateRequest(reportValidation.generateReport),
   ReportController.generateReport
 );
 
-// Get reports
+router.post(
+  '/bulk',
+  validateRequest(reportValidation.bulkGenerate),
+  ReportController.bulkGenerateReports
+);
+
+router.post(
+  '/upload',
+  validateRequest(reportValidation.uploadExternal),
+  ReportController.uploadExternalReport
+);
+
 router.get(
-  "/",
-  auth("ADMIN", "VENDOR", "SUPPLIER"),
+  '/',
   ReportController.getReports
 );
 
-// Get report by ID
 router.get(
-  "/:reportId",
-  auth("ADMIN", "VENDOR", "SUPPLIER"),
-  ReportController.getReportById
-);
-
-// Update report
-router.patch(
-  "/:reportId",
-  auth("ADMIN", "VENDOR"),
-  validateRequest(updateReportSchema),
-  ReportController.updateReport
-);
-
-// Delete report
-router.delete(
-  "/:reportId",
-  auth("ADMIN", "VENDOR"),
-  ReportController.deleteReport
-);
-
-// Send report
-router.post(
-  "/:reportId/send",
-  auth("ADMIN", "VENDOR"),
-  ReportController.sendReport
-);
-
-// Get report statistics
-router.get(
-  "/statistics",
-  auth("ADMIN", "VENDOR"),
+  '/statistics',
   ReportController.getReportStatistics
 );
 
-export const ReportRoutes = router;
+router.get(
+  '/:reportId',
+  ReportController.getReportById
+);
+
+// Document endpoints
+router.get(
+  '/:reportId/document',
+  ReportController.getReportDocument
+);
+
+router.get(
+  '/:reportId/document/url',
+  ReportController.getReportDocumentUrl
+);
+
+router.put(
+  '/:reportId',
+  validateRequest(reportValidation.updateReport),
+  ReportController.updateReport
+);
+
+router.delete(
+  '/:reportId',
+  ReportController.deleteReport
+);
+
+router.post(
+  '/:reportId/send',
+  validateRequest(reportValidation.sendReport),
+  ReportController.sendReport
+);
+
+export const reportRoutes = router;

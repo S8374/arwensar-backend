@@ -1,9 +1,10 @@
 // src/modules/notification/notification.route.ts
 import express from "express";
 import { NotificationController } from "./notification.controller";
-import { markAsReadSchema } from "./notification.constant";
+import { createNotificationSchema, markAsReadSchema } from "./notification.constant";
 import auth from "../../middlewares/auth";
 import validateRequest from "../../middlewares/validateRequest";
+import { UserRole } from "@prisma/client";
 
 const router = express.Router();
 
@@ -49,5 +50,14 @@ router.delete(
   auth("ADMIN", "VENDOR", "SUPPLIER"),
   NotificationController.clearAllNotifications
 );
-
+router.post(
+  "/create",
+  auth("ADMIN", "VENDOR", "SUPPLIER"),
+  NotificationController.createNotification
+);
+router.get(
+  '/targets',
+  auth(UserRole.ADMIN, UserRole.VENDOR, UserRole.SUPPLIER),
+  NotificationController.getTargetUsers
+);
 export const NotificationRoutes = router;

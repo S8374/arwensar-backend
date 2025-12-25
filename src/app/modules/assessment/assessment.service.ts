@@ -96,7 +96,11 @@ export const AssessmentService = {
   // ========== GET ASSESSMENT BY ID ==========
   async getAssessmentById(assessmentId: string, userId?: string): Promise<any> {
     const assessment = await prisma.assessment.findUnique({
-      where: { id: assessmentId, isActive: true },
+      where: {
+        id: assessmentId,
+        isActive: true
+
+      },
       include: {
         categories: {
           include: {
@@ -526,52 +530,61 @@ export const AssessmentService = {
   },
 
   // ========== SAVE ANSWER ==========
+  // ========== SAVE ANSWER ==========
   async saveAnswer(
     submissionId: string,
     questionId: string,
     userId: string,
     data: any
   ): Promise<AssessmentAnswer> {
-    // Check submission
+    // Allow saving answers in DRAFT, REJECTED, or REQUIRES_ACTION states
+    const editableStatuses: ("DRAFT" | "REJECTED" | "REQUIRES_ACTION")[] = [
+      "DRAFT",
+      "REJECTED",
+      "REQUIRES_ACTION",
+    ];
+
     const submission = await prisma.assessmentSubmission.findFirst({
       where: {
         id: submissionId,
         userId,
-        status: 'DRAFT'
+        status: { in: editableStatuses },
       },
       include: {
-        answers: true
-      }
+        answers: true,
+      },
     });
 
     if (!submission) {
-      throw new ApiError(httpStatus.NOT_FOUND, "Submission not found or not in draft");
+      throw new ApiError(
+        httpStatus.BAD_REQUEST,
+        "Submission not found or not editable. It may have been approved or is under review."
+      );
     }
 
-    // Check question
     const question = await prisma.assessmentQuestion.findUnique({
-      where: { id: questionId }
+      where: { id: questionId },
     });
 
     if (!question) {
       throw new ApiError(httpStatus.NOT_FOUND, "Question not found");
     }
 
-    // Calculate score based on answer
+    // Calculate score
     let score = 0;
     switch (data.answer) {
-      case 'YES':
+      case "YES":
         score = question.maxScore;
         break;
-      case 'PARTIAL':
+      case "PARTIAL":
         score = question.maxScore * 0.5;
         break;
-      case 'NO':
+      case "NO":
         score = 0;
         break;
-      case 'NOT_APPLICABLE':
-      case 'NA':
-        score = question.maxScore; // Full score for N/A
+      case "NOT_APPLICABLE":
+      case "NA":
+        score = question.maxScore;
         break;
     }
 
@@ -579,71 +592,46 @@ export const AssessmentService = {
       answer: data.answer,
       score,
       maxScore: question.maxScore,
-      comments: data.comments
+      comments: data.comments || null,
     };
 
     // Handle evidence
-    if (data.evidence || data.evidenceFile) {
-      answerData.evidence = data.evidence || data.evidenceFile;
-
+    if (data.evidence) {
+      answerData.evidence = data.evidence;
       if (question.evidenceRequired) {
-        answerData.evidenceStatus = 'SUBMITTED';
-
-        // Create document record if evidenceFile is provided
-        if (data.evidenceFile) {
-          await prisma.document.create({
-            data: {
-              name: `Evidence for question ${question.questionId}`,
-              type: 'evidence',
-              url: data.evidenceFile,
-              fileSize: 0, // Would need actual file size
-              mimeType: 'application/octet-stream',
-              uploadedById: userId,
-              supplierId: submission.supplierId,
-              assessmentAnswerId: questionId ,
-              isPrivate: true,
-              accessRoles: ['VENDOR', 'ADMIN']
-            }
-          });
-        }
+        answerData.evidenceStatus = "SUBMITTED";
       }
     }
 
-    // Check if answer already exists
     const existingAnswer = await prisma.assessmentAnswer.findFirst({
-      where: {
-        submissionId,
-        questionId
-      }
+      where: { submissionId, questionId },
     });
 
     let answer;
     if (existingAnswer) {
-      // Update existing answer
       answer = await prisma.assessmentAnswer.update({
         where: { id: existingAnswer.id },
-        data: answerData
+        data: answerData,
       });
     } else {
-      // Create new answer
       answer = await prisma.assessmentAnswer.create({
         data: {
           ...answerData,
           submissionId,
-          questionId
-        }
+          questionId,
+        },
       });
 
-      // Update submission counts
-      const answeredCount = submission.answers.length + 1;
-      const progress = Math.round((answeredCount / submission.totalQuestions) * 100);
+      // Update submission progress
+      const newAnsweredCount = submission.answeredQuestions + 1; // It's a number!
+      const progress = Math.round((newAnsweredCount / submission.totalQuestions) * 100);
 
       await prisma.assessmentSubmission.update({
         where: { id: submissionId },
         data: {
-          answeredQuestions: answeredCount,
-          progress
-        }
+          answeredQuestions: newAnsweredCount,
+          progress,
+        },
       });
     }
 
@@ -651,164 +639,162 @@ export const AssessmentService = {
   },
 
   // ========== SUBMIT ASSESSMENT ==========
-  async submitAssessment(submissionId: string, userId: string, data?: any): Promise<AssessmentSubmission> {
-    const submission = await prisma.assessmentSubmission.findFirst({
-      where: {
-        id: submissionId,
-        userId,
-        status: 'DRAFT'
+ // ========== SUBMIT ASSESSMENT ==========
+async submitAssessment(submissionId: string, userId: string, data?: any): Promise<AssessmentSubmission> {
+  // Allow submission from these statuses
+  const submittableStatuses: ("DRAFT" | "REJECTED" | "REQUIRES_ACTION")[] = [
+    "DRAFT",
+    "REJECTED",
+    "REQUIRES_ACTION",
+  ];
+
+  const submission = await prisma.assessmentSubmission.findFirst({
+    where: {
+      id: submissionId,
+      userId,
+      status: { in: submittableStatuses },
+    },
+    include: {
+      assessment: true,
+      answers: {
+        include: {
+          question: true,
+        },
       },
-      include: {
-        assessment: true,
-        answers: {
-          include: {
-            question: true
-          }
-        }
-      }
-    });
+    },
+  });
 
-    if (!submission) {
-      throw new ApiError(httpStatus.NOT_FOUND, "Submission not found or already submitted");
+  if (!submission) {
+    throw new ApiError(
+      httpStatus.BAD_REQUEST,
+      "Submission not found or not submittable. It may be under review or already approved."
+    );
+  }
+
+  // Validate all questions are answered
+  if (submission.answeredQuestions < submission.totalQuestions) {
+    throw new ApiError(
+      httpStatus.BAD_REQUEST,
+      `Please answer all ${submission.totalQuestions} questions. Currently answered: ${submission.answeredQuestions}.`
+    );
+  }
+
+  // Recalculate BIV scores
+  const bivScores = this.calculateBIVScores(submission.answers);
+
+  // Calculate overall percentage score
+  let totalScore = 0;
+  let totalMaxScore = 0;
+  submission.answers.forEach((ans) => {
+    if (ans.score !== null && ans.score !== undefined) {
+      totalScore += ans.score.toNumber();
+      totalMaxScore += ans.maxScore;
     }
+  });
+  const finalScore = totalMaxScore > 0 ? (totalScore / totalMaxScore) * 100 : 0;
 
-    // Check if all required questions are answered
-    const requiredQuestions = await prisma.assessmentQuestion.count({
-      where: {
-        category: {
-          assessmentId: submission.assessmentId
-        }
-      }
+  // Determine risk score
+  const riskScore = bivScores.riskLevel === "HIGH" ? 3 : bivScores.riskLevel === "MEDIUM" ? 2 : 1;
+
+  const result = await prisma.$transaction(async (tx) => {
+    const updatedSubmission = await tx.assessmentSubmission.update({
+      where: { id: submissionId },
+      data: {
+        status: "PENDING",
+        submittedAt: new Date(),
+        score: finalScore,
+        businessScore: bivScores.businessScore,
+        integrityScore: bivScores.integrityScore,
+        availabilityScore: bivScores.availabilityScore,
+        bivScore: bivScores.bivScore,
+        riskLevel: bivScores.riskLevel,
+        riskBreakdown: bivScores.breakdown,
+        riskScore,
+        // Clear previous review data when re-submitting
+        reviewedAt: null,
+        reviewedBy: null,
+        reviewComments: null,
+        reviewerReport: null,
+      },
     });
 
-    const answeredRequiredQuestions = submission.answers.filter(
-      answer => answer.answer !== null && answer.answer !== undefined
-    ).length;
-
-    if (answeredRequiredQuestions < requiredQuestions) {
-      throw new ApiError(
-        httpStatus.BAD_REQUEST,
-        `Please answer all required questions. ${answeredRequiredQuestions}/${requiredQuestions} answered.`
-      );
-    }
-
-    // Calculate scores
-    const bivScores = this.calculateBIVScores(submission.answers);
-
-    // Calculate overall score
-    let totalScore = 0;
-    let totalMaxScore = 0;
-
-    submission.answers.forEach(answer => {
-      if (answer.score !== null && answer.score !== undefined) {
-        totalScore += answer.score.toNumber();
-        totalMaxScore += answer.maxScore;
-      }
+    // Update supplier with latest scores
+    await tx.supplier.update({
+      where: { id: submission.supplierId },
+      data: {
+        bivScore: bivScores.bivScore,
+        businessScore: bivScores.businessScore,
+        integrityScore: bivScores.integrityScore,
+        availabilityScore: bivScores.availabilityScore,
+        riskLevel: bivScores.riskLevel,
+        lastAssessmentDate: new Date(),
+        // Only mark as completed if approved later — not on submit
+      },
     });
 
-    const finalScore = totalMaxScore > 0 ? (totalScore / totalMaxScore) * 100 : 0;
-
-    const result = await prisma.$transaction(async (tx) => {
-      // Update submission
-      const updatedSubmission = await tx.assessmentSubmission.update({
-        where: { id: submissionId },
-        data: {
-          status: 'SUBMITTED',
-          submittedAt: new Date(),
-          score: finalScore,
-          businessScore: bivScores.businessScore,
-          integrityScore: bivScores.integrityScore,
-          availabilityScore: bivScores.availabilityScore,
-          bivScore: bivScores.bivScore,
-          riskLevel: bivScores.riskLevel,
-          riskBreakdown: bivScores.breakdown,
-          reviewComments: data?.reviewComments
-        }
+    // Notify vendor
+    if (submission.vendorId) {
+      const vendor = await tx.vendor.findUnique({
+        where: { id: submission.vendorId },
+        select: { userId: true, companyName: true },
       });
 
-      // Update supplier with latest scores
-      await tx.supplier.update({
-        where: { id: submission.supplierId },
-        data: {
-          bivScore: bivScores.bivScore,
-          businessScore: bivScores.businessScore,
-          integrityScore: bivScores.integrityScore,
-          availabilityScore: bivScores.availabilityScore,
-          riskLevel: bivScores.riskLevel,
-          lastAssessmentDate: new Date(),
-          initialAssessmentCompleted: submission.stage === 'INITIAL',
-          fullAssessmentCompleted: submission.stage === 'FULL',
-          nis2Compliant: bivScores.bivScore >= 71
-        }
-      });
-
-      // Create notification for vendor
-      if (submission.vendorId) {
-        const vendor = await tx.vendor.findUnique({
-          where: { id: submission.vendorId },
-          select: { userId: true, companyName: true }
+      if (vendor?.userId) {
+        await NotificationService.createNotification({
+          userId: vendor.userId,
+          title: "Assessment Re-Submitted",
+          message: `Supplier has re-submitted assessment: "${submission.assessment.title}"`,
+          type: "ASSESSMENT_SUBMITTED",
+          metadata: {
+            submissionId: submission.id,
+            assessmentId: submission.assessmentId,
+            supplierId: submission.supplierId,
+            score: finalScore,
+            riskLevel: bivScores.riskLevel,
+            isResubmission: true,
+          },
         });
 
-        if (vendor) {
-          await NotificationService.createNotification({
-            userId: vendor.userId,
-            title: "Assessment Submitted",
-            message: `Supplier has submitted assessment: "${submission.assessment.title}"`,
-            type: 'ASSESSMENT_SUBMITTED',
-            metadata: {
-              submissionId: submission.id,
-              assessmentId: submission.assessmentId,
-              supplierId: submission.supplierId,
-              score: finalScore,
-              riskLevel: bivScores.riskLevel
-            }
+        // Optional: Send email
+        try {
+          const vendorUser = await tx.user.findUnique({
+            where: { id: vendor.userId },
+            select: { email: true },
           });
 
-          // Send email notification to vendor
-          try {
+          if (vendorUser?.email) {
             await mailtrapService.sendHtmlEmail({
-              to: vendor.userId, // Would need vendor email
-              subject: `Assessment Submitted: ${submission.assessment.title}`,
+              to: vendorUser.email,
+              subject: `Assessment Re-Submitted: ${submission.assessment.title}`,
               html: `
                 <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-                  <h2 style="color: #333;">Assessment Submitted for Review</h2>
-                  <p>A supplier has submitted an assessment for your review.</p>
-                  
-                  <div style="background-color: #f8f9fa; padding: 20px; border-radius: 5px; margin: 20px 0;">
-                    <h3 style="margin-top: 0;">Assessment Details:</h3>
+                  <h2>Assessment Re-Submitted</h2>
+                  <p>A supplier has updated and re-submitted their assessment.</p>
+                  <div style="background:#f8f9fa;padding:20px;border-radius:8px;">
                     <p><strong>Assessment:</strong> ${submission.assessment.title}</p>
-                    <p><strong>Supplier:</strong> ${submission.supplierId}</p>
-                    <p><strong>Score:</strong> ${finalScore.toFixed(2)}%</p>
-                    <p><strong>Risk Level:</strong> <span style="color: ${bivScores.riskLevel === 'HIGH' ? '#dc3545' :
-                  bivScores.riskLevel === 'MEDIUM' ? '#ffc107' : '#28a745'
-                }">${bivScores.riskLevel}</span></p>
-                    <p><strong>Submitted At:</strong> ${new Date().toLocaleString()}</p>
+                    <p><strong>Score:</strong> ${finalScore.toFixed(1)}%</p>
+                    <p><strong>Risk Level:</strong> ${bivScores.riskLevel}</p>
                   </div>
-                  
-                  <p>Please log in to review the assessment and evidence.</p>
-                  
-                  <div style="text-align: center; margin: 30px 0;">
-                    <a href="${process.env.FRONTEND_URL}/assessments/submissions/${submissionId}" style="background-color: #007bff; color: white; padding: 12px 30px; text-decoration: none; border-radius: 5px; font-weight: bold;">
-                      Review Assessment
-                    </a>
-                  </div>
-                  
-                  <hr style="border: none; border-top: 1px solid #eee; margin: 20px 0;">
-                  <p style="color: #666; font-size: 12px;">© ${new Date().getFullYear()} CyberNark. All rights reserved.</p>
+                  <p>Please review the updated responses.</p>
+                  <a href="${process.env.FRONTEND_URL}/vendor/assessments/submissions/${submissionId}"
+                     style="background:#007bff;color:white;padding:12px 24px;text-decoration:none;border-radius:6px;display:inline-block;margin:20px 0;">
+                    Review Submission
+                  </a>
                 </div>
-              `
+              `,
             });
-          } catch (error) {
-            console.error("Failed to send assessment submission email:", error);
           }
+        } catch (error) {
+          console.error("Failed to send re-submission email:", error);
         }
       }
+    }
 
-      return updatedSubmission;
-    });
+    return updatedSubmission;
+  });
 
-    return result;
-  },
+  return result;
+},
 
   // ========== REVIEW ASSESSMENT ==========
   async reviewAssessment(
@@ -818,8 +804,8 @@ export const AssessmentService = {
   ): Promise<AssessmentSubmission> {
     const submission = await prisma.assessmentSubmission.findFirst({
       where: {
-        id: submissionId,
-        status: { in: ['SUBMITTED', 'UNDER_REVIEW', 'REQUIRES_ACTION'] }
+        assessmentId: submissionId,
+        status: { in: ['SUBMITTED', 'UNDER_REVIEW', 'REQUIRES_ACTION', 'PENDING'] }
       },
       include: {
         assessment: true,
@@ -832,7 +818,7 @@ export const AssessmentService = {
         }
       }
     });
-
+    console.log("submission", submission)
     if (!submission) {
       throw new ApiError(httpStatus.NOT_FOUND, "Submission not found or not available for review");
     }
@@ -857,8 +843,8 @@ export const AssessmentService = {
 
     const result = await prisma.$transaction(async (tx) => {
       // Update submission
-      const updatedSubmission = await tx.assessmentSubmission.update({
-        where: { id: submissionId },
+      const updatedSubmission = await tx.assessmentSubmission.updateMany({
+        where: { assessmentId: submissionId },
         data: {
           status: data.status,
           reviewedAt: new Date(),
@@ -1416,17 +1402,100 @@ export const AssessmentService = {
       }
     });
 
-    // // Delete document record
-    // await prisma.document.deleteMany({
-    //   where: {
-    //     assessmentAnswerId: answerId as string
-    //   }
-    // });
 
     return updatedAnswer;
-  }
+  },
+  // ========== GET SUBMISSIONS BY USER ID ==========
+  async getSubmissionsByUserId(
+    userId: string,
+    options: any = {}
+  ): Promise<{ submissions: any[]; meta: any }> {
+    const {
+      page = 1,
+      limit = 20,
+      status,
+      stage,
+      assessmentId,
+      supplierId,
+      sortBy = 'createdAt',
+      sortOrder = 'desc'
+    } = options;
 
-  // Helper method to delete from Cloudinary
+    const skip = (page - 1) * limit;
+
+    const where: any = {
+      userId: userId // Filter by the provided userId
+    };
+
+    // Apply additional filters if provided
+    if (status) {
+      where.status = status;
+    }
+    if (stage) {
+      where.stage = stage;
+    }
+    if (assessmentId) {
+      where.assessmentId = assessmentId;
+    }
+    if (supplierId) {
+      where.supplierId = supplierId;
+    }
+
+    const [submissions, total] = await Promise.all([
+      prisma.assessmentSubmission.findMany({
+        where,
+        include: {
+          assessment: {
+            select: {
+              id: true,
+              title: true,
+              description: true,
+              stage: true
+            }
+          },
+          user: {
+            select: {
+              id: true,
+              email: true,
+              role: true
+            }
+          },
+          supplier: {
+            select: {
+              id: true,
+              name: true,
+              email: true
+            }
+          },
+          answers: {
+            include: {
+              question: {
+                select: {
+                  id: true,
+                  question: true,
+                  bivCategory: true
+                }
+              }
+            }
+          }
+        },
+        orderBy: { [sortBy]: sortOrder },
+        skip,
+        take: limit
+      }),
+      prisma.assessmentSubmission.count({ where })
+    ]);
+
+    return {
+      submissions,
+      meta: {
+        page,
+        limit,
+        total,
+        pages: Math.ceil(total / limit)
+      }
+    };
+  }
 
 
 };

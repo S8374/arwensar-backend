@@ -7,11 +7,11 @@ import { VendorRoutes } from '../modules/vendor/vendor.route';
 import { SupplierRoutes } from '../modules/supplier/supplier.route';
 import { AssessmentRoutes } from '../modules/assessment/assessment.route';
 import { NotificationRoutes } from '../modules/notification/notification.route';
-import { ReportRoutes } from '../modules/report/report.route';
 import { ProblemRoutes } from '../modules/problem/problem.route';
 import { paymentRoutes } from '../modules/payment/payment.routes';
 import { WebhookRoutes } from '../modules/webhook/webhook.routes';
 import { DocumentRoutes } from '../modules/documents/document.route';
+import { reportRoutes } from '../modules/report/report.route';
 
 const router = express.Router();
 
@@ -23,7 +23,7 @@ const moduleRoutes = [
   { path: '/supplier', route: SupplierRoutes },
   { path: '/assessments', route: AssessmentRoutes },
   { path: '/notifications', route: NotificationRoutes },
-  { path: '/reports', route: ReportRoutes },
+  { path: '/reports', route: reportRoutes },
   { path: '/payment', route: paymentRoutes },
   { path: '/problems', route: ProblemRoutes },
     { path: '/webhook', route: WebhookRoutes } ,// Webhook routes should be last

@@ -4,6 +4,7 @@ import { VendorController } from "./vendor.controller";
 import { updateVendorProfileSchema } from "./vendor.constant";
 import auth from "../../middlewares/auth";
 import validateRequest from "../../middlewares/validateRequest";
+import { UserRole } from "@prisma/client";
 
 const router = express.Router();
 
@@ -31,7 +32,7 @@ router.patch(
 // Suppliers
 router.get(
   "/suppliers",
-  auth("VENDOR"),
+  auth("VENDOR" , "SUPPLIER"),
   VendorController.getSuppliers
 );
 
@@ -43,6 +44,7 @@ router.get(
 router.post(
   "/suppliers/create",
   auth("VENDOR"),
+
   VendorController.createSupplier
 );
 // Assessment Review
@@ -61,5 +63,17 @@ router.get(
   "/suppliers/:supplierId/progress",
   auth("VENDOR"),
   VendorController.getSingleSupplierProgress
+);
+
+router.post(
+  '/bulk-import',
+  auth(UserRole.VENDOR),
+  VendorController.bulkImportSuppliers
+);
+
+router.post(
+  "/:supplierId/resend-invitation",
+  auth("VENDOR"),
+  VendorController.resendInvitation
 );
 export const VendorRoutes = router;

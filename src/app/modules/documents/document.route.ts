@@ -39,7 +39,6 @@ router.patch(
 router.post(
   "/:documentId/review",
   auth("VENDOR", "ADMIN"),
-  validateRequest(reviewDocumentSchema),
   DocumentController.reviewDocument
 );
 
@@ -85,5 +84,6 @@ router.post(
   auth("ADMIN"),
   DocumentController.checkExpiredDocuments
 );
-
+// document.routes.ts
+router.get('/user/:userID', auth('ADMIN', 'VENDOR', 'SUPPLIER'), DocumentController.getMyDocuments);
 export const DocumentRoutes = router;

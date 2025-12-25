@@ -119,9 +119,9 @@ export const SupplierService = {
     }
 
     // Check if supplier email already exists
-    const existingSupplier = await prisma.supplier.findUnique({
-      where: { email: payload.email }
-    });
+  const existingSupplier = await prisma.supplier.findUnique({
+  where: { email: payload.email }
+}); 
 
     if (existingSupplier) {
       throw new ApiError(httpStatus.CONFLICT, "Supplier with this email already exists");
@@ -148,7 +148,7 @@ export const SupplierService = {
       criticality: payload.criticality as Criticality,
       contractStartDate: new Date(payload.contractStartDate),
       contractEndDate: payload.contractEndDate ? new Date(payload.contractEndDate) : null,
-      documentUrl: payload.documentUrl,
+      contractDocument: payload.contractDocument,
       documentType: payload.documentType,
       vendorId,
       invitationToken,
