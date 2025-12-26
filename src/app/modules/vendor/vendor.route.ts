@@ -76,4 +76,7 @@ router.post(
   auth("VENDOR"),
   VendorController.resendInvitation
 );
+
+
+
 export const VendorRoutes = router;

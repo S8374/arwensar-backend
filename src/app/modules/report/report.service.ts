@@ -32,7 +32,7 @@ export const ReportService = {
         }
       }
     });
-
+   console.log("user",user);
     if (!user) {
       throw new ApiError(httpStatus.NOT_FOUND, "User not found");
     }
@@ -102,7 +102,8 @@ export const ReportService = {
 
       finalSupplierId = user.supplierProfile.id;
       finalVendorId = user.supplierProfile.vendorId;
-
+   console.log("finalSupplierId" , finalSupplierId );
+   console.log("finalVendorId" , finalVendorId )
       // Supplier can only generate reports for themselves
       if (requestedSupplierId && requestedSupplierId !== finalSupplierId) {
         throw new ApiError(httpStatus.FORBIDDEN, "Access to other supplier data is not allowed");

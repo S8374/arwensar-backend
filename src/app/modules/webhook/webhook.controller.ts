@@ -26,7 +26,7 @@ const handleWebhook = catchAsync(async (req: Request, res: Response) => {
     });
   }
 
-  console.log(`🔄 Processing Stripe event: ${event.type}`);
+  // console.log(`🔄 Processing Stripe event: ${event.type}`);
 
   // Handle event types
   switch (event.type) {
@@ -59,7 +59,7 @@ const handleWebhook = catchAsync(async (req: Request, res: Response) => {
       break;
 
     default:
-      console.log(`⚠️ Unhandled event type: ${event.type}`);
+     //  console.log(`⚠️ Unhandled event type: ${event.type}`);
   }
 
   res.json({ received: true, processed: true });

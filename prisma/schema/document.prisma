@@ -50,32 +50,3 @@ enum DocumentStatus {
   REJECTED
   EXPIRED
 }
-// model Document {
-//   id          String   @id @default(uuid())
-//   name        String
-//   type        String
-//   url         String
-//   fileSize    Float    @map("file_size")
-//   mimeType    String   @map("mime_type")
-  
-//   uploadedById String
-//   uploadedBy  User     @relation(fields: [uploadedById], references: [id])
-  
-//   supplierId  String?  @map("supplier_id")
-//   vendorId    String?  @map("vendor_id")
-//   problemId   String?  @map("problem_id")
-//   assessmentSubmissionId String? @map("assessment_submission_id")
-//   assessmentAnswerId String? @map("assessment_answer_id")
-  
-//   isPrivate   Boolean  @default(false) @map("is_private")
-//   accessRoles UserRole[]
-  
-//   createdAt   DateTime @default(now()) @map("created_at")
-//   updatedAt   DateTime @updatedAt @map("updated_at")
-  
-//   @@map("documents")
-//   @@index([uploadedById])
-//   @@index([supplierId, type])
-//   @@index([createdAt])
-//   @@index([assessmentAnswerId])
-// }

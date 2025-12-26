@@ -22,7 +22,7 @@ const handleWebhook = catchAsync(async (req: Request, res: Response) => {
   switch (event.type) {
     case 'checkout.session.completed':
       const session = event.data.object;
-        await PaymentService.handleCheckoutCompleted(session);
+      await PaymentService.handleCheckoutSessionCompleted(session);
       break;
 
     case 'customer.subscription.updated':

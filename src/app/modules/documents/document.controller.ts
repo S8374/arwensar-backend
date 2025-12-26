@@ -89,8 +89,8 @@ const getDocuments = catchAsync(async (req: Request, res: Response) => {
 const getDocumentById = catchAsync(async (req: Request, res: Response) => {
     const userId = req.user?.userId;
     const { documentId } = req.params;
-   console.log("userId", userId);
-   console.log("documentId",documentId);
+    console.log("userId", userId);
+    console.log("documentId", documentId);
     if (!userId) {
         return sendResponse(res, {
             statusCode: httpStatus.UNAUTHORIZED,
@@ -138,9 +138,9 @@ const updateDocument = catchAsync(async (req: Request, res: Response) => {
 const reviewDocument = catchAsync(async (req: Request, res: Response) => {
     const userId = req.user?.userId;
     const { documentId } = req.params;
-   console.log("req", req.body);
-   console.log("userId",userId);
-    console.log("documentId",documentId)
+    console.log("req", req.body);
+    console.log("userId", userId);
+    console.log("documentId", documentId)
     if (!userId) {
         return sendResponse(res, {
             statusCode: httpStatus.UNAUTHORIZED,
@@ -325,19 +325,19 @@ const checkExpiredDocuments = catchAsync(async (req: Request, res: Response) => 
 });
 // document.controller.ts
 const getMyDocuments = catchAsync(async (req: Request, res: Response) => {
-  const userId = req.user?.userId;
-  if (!userId) {
-    throw new ApiError(httpStatus.UNAUTHORIZED, "Unauthorized");
-  }
+    const userId = req.user?.userId;
+    if (!userId) {
+        throw new ApiError(httpStatus.UNAUTHORIZED, "Unauthorized");
+    }
 
-  const documents = await DocumentService.getMyDocuments(userId);
+    const documents = await DocumentService.getMyDocuments(userId);
 
-  sendResponse(res, {
-    statusCode: httpStatus.OK,
-    success: true,
-    message: "Your documents retrieved successfully",
-    data: documents,
-  });
+    sendResponse(res, {
+        statusCode: httpStatus.OK,
+        success: true,
+        message: "Your documents retrieved successfully",
+        data: documents,
+    });
 });
 export const DocumentController = {
     uploadDocument,
@@ -350,6 +350,6 @@ export const DocumentController = {
     getDocumentCategories,
     getExpiringDocuments,
     bulkUpdateDocumentStatus,
-    checkExpiredDocuments ,
+    checkExpiredDocuments,
     getMyDocuments
 };

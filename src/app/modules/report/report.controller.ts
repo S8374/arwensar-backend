@@ -71,7 +71,9 @@ const getVendorReportOptions = catchAsync(async (req: AuthRequest, res: Response
 
 
 // ========== GET REPORTS ==========
-const getReports = catchAsync(async (req: AuthRequest, res: Response) => {
+const getReports = catchAsync(async (req: AuthRequest, res: Response) => { 
+  console.log("Hits here...", req.user);
+
   const userId = req.user?.userId;
 
   if (!userId) {
@@ -269,9 +271,10 @@ const deleteReport = catchAsync(async (req: AuthRequest, res: Response) => {
 
 // ========== SEND REPORT ==========
 const sendReport = catchAsync(async (req: AuthRequest, res: Response) => {
+  console.log("Hits................ send report")
   const userId = req.user?.userId;
   const { reportId } = req.params;
-
+ 
   if (!userId) {
     return sendResponse(res, {
       statusCode: httpStatus.UNAUTHORIZED,

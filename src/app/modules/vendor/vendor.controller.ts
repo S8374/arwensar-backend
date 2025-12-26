@@ -19,7 +19,7 @@ const getDashboardStats = catchAsync(async (req: Request, res: Response) => {
     });
   }
 
-  const stats = await VendorService.getDashboardStats(vendorId);
+  const stats = await VendorService.getVendorDashboardStats(vendorId);
 
   sendResponse(res, {
     statusCode: httpStatus.OK,

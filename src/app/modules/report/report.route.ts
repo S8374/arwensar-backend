@@ -4,6 +4,7 @@ import auth from '../../middlewares/auth';
 import validateRequest from '../../middlewares/validateRequest';
 import { ReportController } from './report.controller';
 import { reportValidation } from './report.constant';
+import { UserRole } from '@prisma/client';
 
 const router = express.Router();
 

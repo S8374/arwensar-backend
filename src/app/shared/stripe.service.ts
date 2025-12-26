@@ -18,21 +18,26 @@ export class StripeService {
 
   // Create a customer
   async createCustomer(
-    email: string, 
-    name?: string, 
+    email: string,
+    name?: string,
     metadata?: any
   ): Promise<Stripe.Customer> {
+    console.log('Creating customer with email:', email); // Add this log
+    console.log('Creating customer with name:', name);
+
     return await this.stripe.customers.create({
+
+
       email,
       name,
       metadata,
     });
   }
-
+  
   // Create a product
   async createProduct(
-    name: string, 
-    description?: string, 
+    name: string,
+    description?: string,
     metadata?: any
   ): Promise<Stripe.Product> {
     return await this.stripe.products.create({
@@ -86,7 +91,7 @@ export class StripeService {
 
   // Cancel a subscription
   async cancelSubscription(
-    subscriptionId: string, 
+    subscriptionId: string,
     cancelAtPeriodEnd: boolean = false
   ): Promise<Stripe.Subscription> {
     return await this.stripe.subscriptions.update(subscriptionId, {
@@ -101,7 +106,7 @@ export class StripeService {
 
   // Update subscription
   async updateSubscription(
-    subscriptionId: string, 
+    subscriptionId: string,
     priceId: string
   ): Promise<Stripe.Subscription> {
     const subscription = await this.getSubscription(subscriptionId);
@@ -176,7 +181,7 @@ export class StripeService {
 
   // Create a portal session for customer portal
   async createPortalSession(
-    customerId: string, 
+    customerId: string,
     returnUrl: string
   ): Promise<Stripe.BillingPortal.Session> {
     return await this.stripe.billingPortal.sessions.create({

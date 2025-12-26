@@ -83,7 +83,8 @@ export const PaymentService = {
     }
 
     const vendor = user.vendorProfile;
-
+    console.log("user",user);
+    console.log("vendor profile", vendor);
     // Check if user already has an active subscription
     const existingSubscription = await prisma.subscription.findUnique({
       where: { userId }
@@ -108,9 +109,11 @@ export const PaymentService = {
 
     // Get or create Stripe customer
     let stripeCustomerId = vendor.stripeCustomerId;
+    console.log("stripeCustomerId", stripeCustomerId);
+
     if (!stripeCustomerId) {
       const customer = await stripeService.createCustomer(
-        vendor.businessEmail,
+        user.email,
         vendor.companyName,
         {
           userId: user.id,
@@ -129,7 +132,7 @@ export const PaymentService = {
 
     // Create subscription record in database
     const trialEnd = plan.trialDays > 0 ? calculateTrialEndDate(plan.trialDays) : null;
-    
+
     const subscription = await prisma.subscription.upsert({
       where: { userId },
       update: {
@@ -227,8 +230,8 @@ export const PaymentService = {
   },
 
   // ========== CONFIRM PAYMENT ==========
-  async confirmPayment(sessionId: string): Promise<{ 
-    success: boolean; 
+  async confirmPayment(sessionId: string): Promise<{
+    success: boolean;
     message: string;
     data: any;
   }> {
@@ -239,7 +242,7 @@ export const PaymentService = {
     }
 
     const { userId, subscriptionId } = session.metadata;
-    
+
     if (!userId || !subscriptionId) {
       throw new ApiError(httpStatus.BAD_REQUEST, "Invalid session metadata");
     }
@@ -262,7 +265,7 @@ export const PaymentService = {
     }
 
     // Get Stripe subscription details
-    const stripeSubscription = session.subscriptionId 
+    const stripeSubscription = session.subscriptionId
       ? await stripeService.stripe.subscriptions.retrieve(session.subscriptionId as string)
       : null;
 
@@ -272,16 +275,16 @@ export const PaymentService = {
       data: {
         status: stripeSubscription?.status?.toUpperCase() as SubscriptionStatus || 'ACTIVE',
         stripeSubscriptionId: stripeSubscription?.id || session.subscriptionId as string,
-        currentPeriodStart: stripeSubscription?.current_period_start 
+        currentPeriodStart: stripeSubscription?.current_period_start
           ? new Date(stripeSubscription.current_period_start * 1000)
           : new Date(),
-        currentPeriodEnd: stripeSubscription?.current_period_end 
+        currentPeriodEnd: stripeSubscription?.current_period_end
           ? new Date(stripeSubscription.current_period_end * 1000)
           : null,
-        trialStart: stripeSubscription?.trial_start 
+        trialStart: stripeSubscription?.trial_start
           ? new Date(stripeSubscription.trial_start * 1000)
           : null,
-        trialEnd: stripeSubscription?.trial_end 
+        trialEnd: stripeSubscription?.trial_end
           ? new Date(stripeSubscription.trial_end * 1000)
           : null,
         updatedAt: new Date()
@@ -427,7 +430,7 @@ export const PaymentService = {
       stripeSubscription,
       nextBillingDate: subscription.currentPeriodEnd,
       isTrial: subscription.status === 'TRIALING',
-      daysUntilRenewal: subscription.currentPeriodEnd 
+      daysUntilRenewal: subscription.currentPeriodEnd
         ? Math.ceil((subscription.currentPeriodEnd.getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24))
         : null
     };
@@ -535,7 +538,7 @@ export const PaymentService = {
       }
     });
 
-    const message = cancelAtPeriodEnd 
+    const message = cancelAtPeriodEnd
       ? "Your subscription will be cancelled at the end of the current billing period."
       : "Your subscription has been cancelled immediately.";
 
@@ -595,10 +598,10 @@ export const PaymentService = {
 
   // ========== WEBHOOK HANDLERS ==========
   async handleCheckoutSessionCompleted(session: any): Promise<void> {
-    console.log("🔄 Processing checkout.session.completed webhook");
+    console.log("🔄 Processing checkout.session.completed webhook", session);
 
     const { userId, subscriptionId, vendorId, planId } = session.metadata || {};
-    
+
     if (!userId || !subscriptionId || !vendorId || !planId) {
       console.error("❌ Missing required metadata in session:", session.metadata);
       return;
@@ -606,7 +609,7 @@ export const PaymentService = {
 
     try {
       // Fetch subscription from Stripe
-      const stripeSubscription = session.subscription 
+      const stripeSubscription = session.subscription
         ? await stripeService.stripe.subscriptions.retrieve(session.subscription as string)
         : null;
 
@@ -617,16 +620,16 @@ export const PaymentService = {
           status: stripeSubscription?.status?.toUpperCase() as SubscriptionStatus || 'ACTIVE',
           stripeSubscriptionId: stripeSubscription?.id || session.subscription,
           stripeCustomerId: session.customer as string,
-          currentPeriodStart: stripeSubscription?.current_period_start 
+          currentPeriodStart: stripeSubscription?.current_period_start
             ? new Date(stripeSubscription.current_period_start * 1000)
             : new Date(),
-          currentPeriodEnd: stripeSubscription?.current_period_end 
-            ? new Date(stripeSubscription.current_period_end * 1000)
+          currentPeriodEnd: stripeSubscription?.current_period_end
+            ? new Date((stripeSubscription.current_period_end) * 1000)
             : null,
-          trialStart: stripeSubscription?.trial_start 
+          trialStart: stripeSubscription?.trial_start
             ? new Date(stripeSubscription.trial_start * 1000)
             : null,
-          trialEnd: stripeSubscription?.trial_end 
+          trialEnd: stripeSubscription?.trial_end
             ? new Date(stripeSubscription.trial_end * 1000)
             : null,
           updatedAt: new Date()

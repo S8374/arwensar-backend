@@ -1,15 +1,17 @@
 // src/utils/pdfGenerator.ts
+import { Client } from 'minio';
 import PDFDocument from 'pdfkit';
-import cloudinary from 'cloudinary';
-import stream from 'stream';
 
-// Configure Cloudinary
-cloudinary.v2.config({
-  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
-  api_key: process.env.CLOUDINARY_API_KEY,
-  api_secret: process.env.CLOUDINARY_API_SECRET,
-  secure: true
+// Configure MinIO Client
+const minioClient = new Client({
+  endPoint: 's3.cybernark.com',
+  port: 9000,
+  useSSL: false,
+  accessKey: process.env.MINIO_ROOT_USER || 'minioadmin',
+  secretKey: process.env.MINIO_ROOT_PASSWORD || 'tatfxs4fxutl9tgm',
 });
+
+const BUCKET_NAME = 'test';
 
 interface PDFOptions {
   title: string;
@@ -25,16 +27,14 @@ export const generatePDF = async (options: PDFOptions): Promise<string> => {
     try {
       const doc = new PDFDocument({ margin: 50 });
 
-      // Create a buffer to hold PDF data
       const chunks: Buffer[] = [];
 
-      doc.on('data', (chunk) => chunks.push(chunk));
+      doc.on('data', (chunk) => chunks.push(chunk as Buffer));
       doc.on('end', async () => {
         try {
           const pdfBuffer = Buffer.concat(chunks);
 
-          // Upload to Cloudinary
-          const cloudinaryUrl = await uploadToCloudinary(
+          const url = await uploadToMinIO(
             pdfBuffer,
             options.title,
             options.type,
@@ -42,7 +42,7 @@ export const generatePDF = async (options: PDFOptions): Promise<string> => {
             options.userId
           );
 
-          resolve(cloudinaryUrl);
+          resolve(url);
         } catch (error) {
           reject(error);
         }
@@ -50,7 +50,7 @@ export const generatePDF = async (options: PDFOptions): Promise<string> => {
 
       doc.on('error', reject);
 
-      // Add header
+      // Header
       doc
         .fontSize(20)
         .text('CyberNark', { align: 'center' })
@@ -64,7 +64,7 @@ export const generatePDF = async (options: PDFOptions): Promise<string> => {
         .text(`Generated: ${new Date().toLocaleDateString()}`)
         .moveDown();
 
-      // Add content based on template
+      // Template-based content
       switch (options.template) {
         case 'risk-assessment':
           generateRiskAssessmentPDF(doc, options.data);
@@ -90,9 +90,11 @@ export const generatePDF = async (options: PDFOptions): Promise<string> => {
         case 'vendor-summary':
           generateVendorSummaryPDF(doc, options.data);
           break;
+        default:
+          doc.text('Unknown template').moveDown();
       }
 
-      // Add footer
+      // Footer
       doc
         .moveDown(2)
         .fontSize(10)
@@ -106,43 +108,38 @@ export const generatePDF = async (options: PDFOptions): Promise<string> => {
   });
 };
 
-// Upload to Cloudinary
-const uploadToCloudinary = async (
+// Upload to MinIO and return a presigned URL (7 days expiry - safest option)
+const uploadToMinIO = async (
   buffer: Buffer,
   title: string,
   type: string,
   vendorId?: string,
   userId?: string
 ): Promise<string> => {
-  return new Promise((resolve, reject) => {
-    const uploadStream = cloudinary.v2.uploader.upload_stream(
-      {
-        folder: `reports/${vendorId || 'general'}`,
-        public_id: `${type.toLowerCase()}_${Date.now()}`,
-        resource_type: 'auto',
-        tags: ['report', type.toLowerCase(), vendorId ? `vendor-${vendorId}` : ''],
-        context: {
-          caption: title,
-          alt: `${type} Report - ${title}`,
-          userId: userId || 'unknown'
-        }
-      },
-      (error, result) => {
-        if (error) {
-          reject(error);
-        } else if (result) {
-          resolve(result.secure_url);
-        } else {
-          reject(new Error('Upload failed'));
-        }
-      }
-    );
+  const folder = vendorId ? `reports/${vendorId}` : 'reports/general';
+  const timestamp = Date.now();
+  const fileName = `${type.toLowerCase().replace(/\s+/g, '-')}_${timestamp}.pdf`;
+  const objectName = `${folder}/${fileName}`;
 
-    // Create a readable stream from buffer
-    const bufferStream = new stream.PassThrough();
-    bufferStream.end(buffer);
-    bufferStream.pipe(uploadStream);
-  });
+  const metaData = {
+    'Content-Type': 'application/pdf',
+    'X-Amz-Meta-Title': title,
+    'X-Amz-Meta-Type': type,
+    'X-Amz-Meta-Userid': userId || 'unknown',
+    'X-Amz-Meta-Generated': new Date().toISOString(),
+  };
+
+  // Upload the PDF
+  await minioClient.putObject(BUCKET_NAME, objectName, buffer, buffer.length, metaData);
+
+  // Generate presigned GET URL - valid for 7 days (maximum allowed by MinIO)
+  const presignedUrl = await minioClient.presignedGetObject(
+    BUCKET_NAME,
+    objectName,
+    60 * 60 * 24 * 7 // 7 days in seconds
+  );
+
+  return presignedUrl;
 };
 
 // ========== PDF CONTENT GENERATORS ==========
@@ -160,7 +157,6 @@ const generateRiskAssessmentPDF = (doc: PDFKit.PDFDocument, data: any) => {
     .text(`Average BIV Score: ${data.averageBIVScore?.toFixed(2) || '0'}%`)
     .moveDown();
 
-  // Risk distribution
   doc.text('Risk Distribution:');
   if (data.riskDistribution) {
     Object.entries(data.riskDistribution).forEach(([level, count]) => {
@@ -170,7 +166,6 @@ const generateRiskAssessmentPDF = (doc: PDFKit.PDFDocument, data: any) => {
 
   doc.moveDown();
 
-  // High risk suppliers
   if (data.highRiskSuppliers && data.highRiskSuppliers.length > 0) {
     doc.text('High Risk Suppliers:');
     data.highRiskSuppliers.forEach((supplier: any, index: number) => {
@@ -178,7 +173,6 @@ const generateRiskAssessmentPDF = (doc: PDFKit.PDFDocument, data: any) => {
     });
   }
 
-  // Category breakdown
   if (data.categoryBreakdown && data.categoryBreakdown.length > 0) {
     doc.moveDown();
     doc.text('Category Breakdown:');
@@ -202,7 +196,6 @@ const generateCompliancePDF = (doc: PDFKit.PDFDocument, data: any) => {
     .text(`Compliance Rate: ${data.summary?.complianceRate?.toFixed(2) || '0'}%`)
     .moveDown();
 
-  // Monthly compliance
   if (data.complianceByMonth) {
     doc.text('Monthly Compliance:');
     Object.entries(data.complianceByMonth).forEach(([month, stats]: [string, any]) => {
@@ -211,7 +204,6 @@ const generateCompliancePDF = (doc: PDFKit.PDFDocument, data: any) => {
     });
   }
 
-  // Top compliant suppliers
   if (data.topCompliantSuppliers && data.topCompliantSuppliers.length > 0) {
     doc.moveDown();
     doc.text('Top Compliant Suppliers:');
@@ -227,7 +219,6 @@ const generateSupplierEvaluationPDF = (doc: PDFKit.PDFDocument, data: any) => {
     .text('Supplier Evaluation Report', { underline: true })
     .moveDown();
 
-  // Supplier info
   doc
     .fontSize(12)
     .text(`Supplier: ${data.supplier?.name || 'N/A'}`)
@@ -236,7 +227,6 @@ const generateSupplierEvaluationPDF = (doc: PDFKit.PDFDocument, data: any) => {
     .text(`Vendor: ${data.supplier?.vendor?.companyName || 'N/A'}`)
     .moveDown();
 
-  // Scores
   doc.text('Scores:');
   if (data.scores?.overall) {
     doc.text(`  Overall: ${data.scores.overall.average?.toFixed(2) || '0'}% - ${data.scores.overall.riskLevel || 'N/A'} Risk`);
@@ -250,7 +240,6 @@ const generateSupplierEvaluationPDF = (doc: PDFKit.PDFDocument, data: any) => {
 
   doc.moveDown();
 
-  // Recommendations
   if (data.recommendations && data.recommendations.length > 0) {
     doc.text('Recommendations:');
     data.recommendations.forEach((rec: string, index: number) => {
@@ -273,7 +262,6 @@ const generateFinancialPDF = (doc: PDFKit.PDFDocument, data: any) => {
     .text(`Average Payment: ${data.summary?.averagePayment?.toFixed(2) || '0'} ${data.summary?.currency || 'EUR'}`)
     .moveDown();
 
-  // Revenue by month
   if (data.revenueByMonth) {
     doc.text('Revenue by Month:');
     Object.entries(data.revenueByMonth).forEach(([month, revenue]: [string, any]) => {
@@ -296,13 +284,10 @@ const generateSecurityAuditPDF = (doc: PDFKit.PDFDocument, data: any) => {
     .text(`NIS2 Compliance Rate: ${data.securityMetrics?.nis2ComplianceRate?.toFixed(2) || '0'}%`)
     .moveDown();
 
-  // Recommendations
   if (data.recommendations && data.recommendations.length > 0) {
     doc.text('Recommendations:');
     data.recommendations.forEach((rec: string, index: number) => {
-      if (rec) {
-        doc.text(`  ${index + 1}. ${rec}`);
-      }
+      if (rec) doc.text(`  ${index + 1}. ${rec}`);
     });
   }
 };
@@ -321,7 +306,6 @@ const generatePerformanceReviewPDF = (doc: PDFKit.PDFDocument, data: any) => {
     .text(`Overall Performance: ${data.summary?.overallPerformance?.toFixed(2) || '0'}%`)
     .moveDown();
 
-  // Top performers
   if (data.topPerformers && data.topPerformers.length > 0) {
     doc.text('Top Performers:');
     data.topPerformers.forEach((supplier: any, index: number) => {
@@ -345,7 +329,6 @@ const generateIncidentReportPDF = (doc: PDFKit.PDFDocument, data: any) => {
     .text(`SLA Breach Rate: ${data.summary?.slaBreachRate?.toFixed(2) || '0'}%`)
     .moveDown();
 
-  // Top suppliers with issues
   if (data.topSuppliersWithIssues && data.topSuppliersWithIssues.length > 0) {
     doc.text('Top Suppliers with Issues:');
     data.topSuppliersWithIssues.forEach((supplier: any, index: number) => {
@@ -354,8 +337,6 @@ const generateIncidentReportPDF = (doc: PDFKit.PDFDocument, data: any) => {
   }
 };
 
-
-// Add this function:
 const generateVendorSummaryPDF = (doc: PDFKit.PDFDocument, data: any) => {
   doc
     .fontSize(14)
@@ -369,7 +350,6 @@ const generateVendorSummaryPDF = (doc: PDFKit.PDFDocument, data: any) => {
     .text(`Generated: ${new Date().toLocaleDateString()}`)
     .moveDown();
 
-  // Summary Statistics
   doc.text('Summary Statistics:');
   if (data.summary) {
     doc.text(`  Total Suppliers: ${data.summary.totalSuppliers || 0}`);
@@ -384,7 +364,6 @@ const generateVendorSummaryPDF = (doc: PDFKit.PDFDocument, data: any) => {
 
   doc.moveDown();
 
-  // Risk Distribution
   if (data.riskDistribution) {
     doc.text('Risk Distribution:');
     Object.entries(data.riskDistribution).forEach(([level, count]) => {
@@ -392,7 +371,6 @@ const generateVendorSummaryPDF = (doc: PDFKit.PDFDocument, data: any) => {
     });
   }
 
-  // Top Performers
   if (data.topPerformers && data.topPerformers.length > 0) {
     doc.moveDown();
     doc.text('Top Performing Suppliers:');
@@ -401,7 +379,6 @@ const generateVendorSummaryPDF = (doc: PDFKit.PDFDocument, data: any) => {
     });
   }
 
-  // Upcoming Expiries
   if (data.upcomingExpiries && data.upcomingExpiries.length > 0) {
     doc.moveDown();
     doc.text('Upcoming Contract Expiries (next 90 days):');
