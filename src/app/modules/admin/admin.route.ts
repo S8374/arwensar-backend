@@ -38,7 +38,7 @@ router.delete(
 
 router.get(
   "/plans",
-  auth("ADMIN"),
+  auth("ADMIN" , "SUPPLIER" , "VENDOR"),
   AdminController.getAllPlans
 );
 

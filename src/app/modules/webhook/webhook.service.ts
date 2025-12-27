@@ -27,19 +27,19 @@ const handleWebhook = catchAsync(async (req: Request, res: Response) => {
 
     case 'customer.subscription.updated':
     case 'customer.subscription.created':
-      await handleSubscriptionUpdate(event.data.object);
+      await PaymentService.handleSubscriptionUpdated(event.data.object);
       break;
 
     case 'customer.subscription.deleted':
-      await handleSubscriptionDelete(event.data.object);
+      await PaymentService.handleSubscriptionDeleted(event.data.object);
       break;
 
     case 'invoice.payment_succeeded':
-      await handlePaymentSuccess(event.data.object);
+      await PaymentService.handleInvoicePaymentSucceeded(event.data.object);
       break;
 
     case 'invoice.payment_failed':
-      await handlePaymentFailed(event.data.object);
+      await PaymentService.handleInvoicePaymentFailed(event.data.object);
       break;
 
     default:
@@ -48,78 +48,6 @@ const handleWebhook = catchAsync(async (req: Request, res: Response) => {
 
   res.json({ received: true });
 });
-const handleSubscriptionUpdate = async (subscription: any) => {
-  const dbSubscription = await prisma.subscription.findUnique({
-    where: { stripeSubscriptionId: subscription.id },
-  });
-
-  if (dbSubscription) {
-    await prisma.subscription.update({
-      where: { id: dbSubscription.id },
-      data: {
-        status: subscription.status.toUpperCase(),
-        currentPeriodStart: new Date(subscription.current_period_start * 1000),
-        currentPeriodEnd: new Date(subscription.current_period_end * 1000),
-        cancelAtPeriodEnd: subscription.cancel_at_period_end
-      },
-    });
-  }
-};
-
-const handleSubscriptionDelete = async (subscription: any) => {
-  await prisma.subscription.update({
-    where: { stripeSubscriptionId: subscription.id },
-    data: {
-      status: 'CANCELED',
-    },
-  });
-};
-
-const handlePaymentSuccess = async (invoice: any) => {
-  // Create or update payment record
-  await prisma.payment.create({
-    data: {
-      subscriptionId: invoice.subscription as string,
-      amount: invoice.amount_paid / 100, // Convert from cents
-      currency: invoice.currency,
-      status: 'PAID',
-      stripePaymentId: invoice.payment_intent,
-      stripeInvoiceId: invoice.id,
-      paidAt: new Date(),
-    },
-  });
-
-  // Update subscription status
-  if (invoice.subscription) {
-    await prisma.subscription.update({
-      where: { stripeSubscriptionId: invoice.subscription as string },
-      data: {
-        status: 'ACTIVE',
-      },
-    });
-  }
-};
-
-const handlePaymentFailed = async (invoice: any) => {
-  await prisma.payment.create({
-    data: {
-      subscriptionId: invoice.subscription as string,
-      amount: invoice.amount_due / 100,
-      currency: invoice.currency,
-      status: 'FAILED',
-      stripeInvoiceId: invoice.id,
-    },
-  });
-
-  if (invoice.subscription) {
-    await prisma.subscription.update({
-      where: { stripeSubscriptionId: invoice.subscription as string },
-      data: {
-        status: 'PAST_DUE',
-      },
-    });
-  }
-};
 
 
 export const WebhookController = {

@@ -1397,7 +1397,7 @@ async getVendorDashboardStats(vendorId: string): Promise<VendorDashboardStats> {
       include: {
         assessmentSubmissions: {
           where: {
-            status: { in: ['SUBMITTED', 'UNDER_REVIEW', 'APPROVED'] }
+            status: { in: ['SUBMITTED', 'UNDER_REVIEW', 'APPROVED' , "PENDING" , "DRAFT" , "ARCHIVED" , "REJECTED"] }
           },
           include: {
             assessment: {
@@ -1419,7 +1419,7 @@ async getVendorDashboardStats(vendorId: string): Promise<VendorDashboardStats> {
     // Calculate progress statistics
     const totalAssessments = supplier.assessmentSubmissions.length;
     const completedAssessments = supplier.assessmentSubmissions.filter(
-      sub => sub.status === 'APPROVED'
+      sub => sub.status === 'APPROVED' && sub.stage === "FULL" 
     ).length;
 
     // Check if all required assessments are completed

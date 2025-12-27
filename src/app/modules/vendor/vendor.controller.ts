@@ -268,6 +268,8 @@ const resendInvitation = catchAsync(async (req: Request, res: Response) => {
     }
   });
 });
+
+
 export const VendorController = {
   getDashboardStats,
   getVendorProfile,

@@ -22,7 +22,7 @@ export class StripeService {
     name?: string,
     metadata?: any
   ): Promise<Stripe.Customer> {
-    console.log('Creating customer with email:', email); // Add this log
+    console.log('Creating customer with email:', email);
     console.log('Creating customer with name:', name);
 
     return await this.stripe.customers.create({

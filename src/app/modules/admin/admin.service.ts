@@ -4,6 +4,7 @@ import { Plan, Assessment, Vendor, Supplier, User, Criticality } from "@prisma/c
 import httpStatus from "http-status";
 import { prisma } from "../../shared/prisma";
 import ApiError from "../../../error/ApiError";
+import { stripeService } from "../../shared/stripe.service";
 
 
 export interface AdminDashboardStats {
@@ -271,30 +272,70 @@ export const AdminService = {
   },
 
   async deletePlan(planId: string): Promise<Plan> {
+    // 1. Find the plan
     const plan = await prisma.plan.findUnique({
-      where: { id: planId }
+      where: { id: planId },
+      select: {
+        id: true,
+        name: true,
+        stripePriceId: true,
+        isActive: true,
+        isDeleted: true,
+      },
     });
 
     if (!plan) {
       throw new ApiError(httpStatus.NOT_FOUND, "Plan not found");
     }
 
-    // Check if plan has active subscriptions
-    const activeSubscriptions = await prisma.subscription.count({
-      where: {
-        planId,
-        status: { in: ['ACTIVE', 'TRIALING', 'PAST_DUE'] }
-      }
-    });
-
-    if (activeSubscriptions > 0) {
-      throw new ApiError(httpStatus.BAD_REQUEST, "Cannot delete plan with active subscriptions");
+    if (plan.isDeleted) {
+      throw new ApiError(httpStatus.BAD_REQUEST, "Plan is already deleted");
     }
 
+    // 2. Check for active subscriptions
+    const activeSubscriptionsCount = await prisma.subscription.count({
+      where: {
+        planId,
+        status: { in: ['ACTIVE', 'TRIALING', 'PAST_DUE'] },
+      },
+    });
+
+    if (activeSubscriptionsCount > 0) {
+      throw new ApiError(
+        httpStatus.BAD_REQUEST,
+        `Cannot delete plan "${plan.name}" because ${activeSubscriptionsCount} active subscription(s) are using it.`
+      );
+    }
+
+    // 3. Archive the Price in Stripe (if stripePriceId exists)
+    if (plan.stripePriceId) {
+      try {
+        await stripeService.stripe.prices.update(plan.stripePriceId, {
+          active: false, // This archives the price
+        });
+        console.log(`Stripe Price archived: ${plan.stripePriceId}`);
+      } catch (stripeError: any) {
+        // If the price was already archived or not found, it's okay — log but continue
+        if (stripeError.code === 'resource_missing') {
+          console.warn(`Stripe Price not found (possibly already deleted): ${plan.stripePriceId}`);
+        } else {
+          console.error(`Failed to archive Stripe Price ${plan.stripePriceId}:`, stripeError.message);
+          // Optionally: throw new ApiError(...) if you want to fail the whole operation
+          // But usually safe to continue with local soft-delete
+        }
+      }
+    }
+
+    // 4. Soft-delete in your database
     const deletedPlan = await prisma.plan.update({
       where: { id: planId },
-      data: { isDeleted: true, isActive: false }
+      data: {
+        isDeleted: true,
+        isActive: false,
+      },
     });
+
+    console.log(`Plan "${deletedPlan.name}" (ID: ${deletedPlan.id}) soft-deleted successfully`);
 
     return deletedPlan;
   },
@@ -313,79 +354,79 @@ export const AdminService = {
   },
 
   // ========== ASSESSMENTS MANAGEMENT ==========
-// src/modules/admin/admin.service.ts - Updated createAssessment method
-async createAssessment(data: any): Promise<Assessment> {
-  // Check if assessment with same examId exists
-  const existingAssessment = await prisma.assessment.findUnique({
-    where: { examId: data.examId }
-  });
+  // src/modules/admin/admin.service.ts - Updated createAssessment method
+  async createAssessment(data: any): Promise<Assessment> {
+    // Check if assessment with same examId exists
+    const existingAssessment = await prisma.assessment.findUnique({
+      where: { examId: data.examId }
+    });
 
-  if (existingAssessment) {
-    throw new ApiError(httpStatus.CONFLICT, "Assessment with this exam ID already exists");
-  }
+    if (existingAssessment) {
+      throw new ApiError(httpStatus.CONFLICT, "Assessment with this exam ID already exists");
+    }
 
-  // Validate that createdBy user exists
-  const user = await prisma.user.findUnique({
-    where: { id: data.createdBy }
-  });
+    // Validate that createdBy user exists
+    const user = await prisma.user.findUnique({
+      where: { id: data.createdBy }
+    });
 
-  if (!user) {
-    throw new ApiError(httpStatus.NOT_FOUND, "User not found");
-  }
+    if (!user) {
+      throw new ApiError(httpStatus.NOT_FOUND, "User not found");
+    }
 
- if (!data.vendorId) {
-  throw new ApiError(httpStatus.BAD_REQUEST, "vendorId is required");
-}
+    if (!data.vendorId) {
+      throw new ApiError(httpStatus.BAD_REQUEST, "vendorId is required");
+    }
 
-const assessment = await prisma.assessment.create({
-  data: {
-    examId: data.examId,
-    title: data.title,
-    description: data.description,
-    isActive: data.isActive !== undefined ? data.isActive : true,
-    isTemplate: data.isTemplate || false,
-    stage: data.stage || 'FULL',
-    totalPoints: data.totalPoints || 100,
-    passingScore: data.passingScore,
-    timeLimit: data.timeLimit,
-    createdByUser: { connect: { id: data.createdBy } },
-    vendorId: data.vendorId, // ✅ required
-    categories: {
-      create: data.categories.map((category: any) => ({
-        categoryId: category.categoryId,
-        title: category.title,
-        description: category.description,
-        order: category.order || 1,
-        weight: category.weight,
-        maxScore: category.maxScore || 100,
-        questions: {
-          create: category.questions.map((question: any) => ({
-            questionId: question.questionId,
-            question: question.question,
-            description: question.description,
-            order: question.order || 1,
-            isDocument: question.isDocument || false,
-            isInputField: question.isInputField || false,
-            answerType: question.answerType || 'YES',
-            weight: question.weight,
-            maxScore: question.maxScore || 10,
-            helpText: question.helpText,
-            bivCategory: question.bivCategory,
-            evidenceRequired: question.evidenceRequired || false
+    const assessment = await prisma.assessment.create({
+      data: {
+        examId: data.examId,
+        title: data.title,
+        description: data.description,
+        isActive: data.isActive !== undefined ? data.isActive : true,
+        isTemplate: data.isTemplate || false,
+        stage: data.stage || 'FULL',
+        totalPoints: data.totalPoints || 100,
+        passingScore: data.passingScore,
+        timeLimit: data.timeLimit,
+        createdByUser: { connect: { id: data.createdBy } },
+        vendorId: data.vendorId, // ✅ required
+        categories: {
+          create: data.categories.map((category: any) => ({
+            categoryId: category.categoryId,
+            title: category.title,
+            description: category.description,
+            order: category.order || 1,
+            weight: category.weight,
+            maxScore: category.maxScore || 100,
+            questions: {
+              create: category.questions.map((question: any) => ({
+                questionId: question.questionId,
+                question: question.question,
+                description: question.description,
+                order: question.order || 1,
+                isDocument: question.isDocument || false,
+                isInputField: question.isInputField || false,
+                answerType: question.answerType || 'YES',
+                weight: question.weight,
+                maxScore: question.maxScore || 10,
+                helpText: question.helpText,
+                bivCategory: question.bivCategory,
+                evidenceRequired: question.evidenceRequired || false
+              }))
+            }
           }))
         }
-      }))
-    }
+      },
+      include: {
+        categories: { include: { questions: true } },
+        createdByUser: { select: { id: true, email: true, role: true } }
+      }
+    });
+
+
+    return assessment;
   },
-  include: {
-    categories: { include: { questions: true } },
-    createdByUser: { select: { id: true, email: true, role: true } }
-  }
-});
-
-
-  return assessment;
-},
 
   async updateAssessment(assessmentId: string, data: any): Promise<Assessment> {
     const assessment = await prisma.assessment.findUnique({

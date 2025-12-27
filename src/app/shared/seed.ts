@@ -6,12 +6,11 @@ import { config } from '../../config';
 
 const prisma = new PrismaClient();
 
-// Initialize Stripe
 const stripe = new Stripe(config.STRIPE.SECRET_KEY, {
-  apiVersion: '2025-12-15.clover'
+  apiVersion: '2025-12-15.clover' // Stable version
 });
 
-// Define the exact pricing plans structure
+// Define pricing plans
 const PRICING_PLANS = {
   MONTHLY: [
     {
@@ -70,7 +69,7 @@ const PRICING_PLANS = {
       billingCycle: 'MONTHLY' as BillingCycle,
       price: 699,
       features: {
-        supplierLimit: 999999, // Unlimited
+        supplierLimit: 999999,
         complianceDashboard: true,
         alertAndReminder: true,
         basicAssessment: false,
@@ -99,7 +98,7 @@ const PRICING_PLANS = {
       name: 'Starter',
       type: 'STARTER' as PlanType,
       billingCycle: 'ANNUAL' as BillingCycle,
-      price: 139, // Discounted from 199
+      price: 139,
       originalPrice: 199,
       features: {
         supplierLimit: 25,
@@ -123,7 +122,7 @@ const PRICING_PLANS = {
       name: 'Business',
       type: 'PROFESSIONAL' as PlanType,
       billingCycle: 'ANNUAL' as BillingCycle,
-      price: 279, // Discounted from 399
+      price: 279,
       originalPrice: 399,
       features: {
         supplierLimit: 100,
@@ -150,10 +149,10 @@ const PRICING_PLANS = {
       name: 'Enterprise',
       type: 'ENTERPRISE' as PlanType,
       billingCycle: 'ANNUAL' as BillingCycle,
-      price: 489, // Discounted from 699
+      price: 489,
       originalPrice: 699,
       features: {
-        supplierLimit: 999999, // Unlimited
+        supplierLimit: 999999,
         complianceDashboard: true,
         alertAndReminder: true,
         basicAssessment: false,
@@ -178,10 +177,10 @@ const PRICING_PLANS = {
   ]
 };
 
-// Add Free Trial Plan
-const FREE_TRIAL_PLAN = {
-  id: 'free-trial',
-  name: 'Free Trial',
+// Free Plan — now created in Stripe with 0 EUR price
+const FREE_PLAN = {
+  id: 'free-plan',
+  name: 'Free',
   type: 'FREE' as PlanType,
   billingCycle: 'MONTHLY' as BillingCycle,
   price: 0,
@@ -195,174 +194,183 @@ const FREE_TRIAL_PLAN = {
     nis2Compliance: false,
     advancedAnalytics: false,
     apiAccess: false,
-    prioritySupport: false,
-    trialOnly: true
+    prioritySupport: false
   },
-  description: '14-day free trial with basic features',
-  trialDays: 14,
+  description: 'Free forever plan with basic features',
+  trialDays: 0,
   isActive: true,
   isDefault: true,
   isPopular: false
 };
 
-async function createStripeProductAndPrice(plan: any): Promise<{ productId: string; priceId: string }> {
+/**
+ * Find existing Stripe product and price
+ */
+async function findExistingStripeData(plan: any): Promise<{ productId: string | null; priceId: string | null }> {
   try {
-  //  console.log(`🔄 Creating Stripe product for: ${plan.name} (${plan.billingCycle})`);
-
-    // Create or get product
-    let productId = plan.stripeProductId;
-    if (!productId) {
-      const product = await stripe.products.create({
-        name: `${plan.name} Plan - ${plan.billingCycle}`,
-        description: plan.description || '',
-        metadata: {
-          planId: plan.id,
-          planType: plan.type,
-          billingCycle: plan.billingCycle
-        }
-      });
-      productId = product.id;
-     // console.log(`✅ Stripe product created: ${productId}`);
-    }
-
-    // Convert billing cycle to Stripe format
-    let stripeInterval: 'month' | 'year';
-    if (plan.billingCycle === 'MONTHLY') {
-      stripeInterval = 'month';
-    } else if (plan.billingCycle === 'ANNUAL') {
-      stripeInterval = 'year';
-    } else {
-      stripeInterval = 'month'; // Default
-    }
-
-    // Create price
-    const price = await stripe.prices.create({
-      unit_amount: Math.round(plan.price * 100), // Convert to cents
-      currency: 'eur',
-      recurring: {
-        interval: stripeInterval,
-        interval_count: 1
-      },
-      product: productId,
-      metadata: {
-        planId: plan.id,
-        planName: plan.name,
-        billingCycle: plan.billingCycle
-      }
+    const products = await stripe.products.list({
+      limit: 100,
+      active: true
     });
 
-    //console.log(`✅ Stripe price created: ${price.id} (${plan.price} EUR/${plan.billingCycle})`);
+    const matchingProduct = products.data.find(p =>
+      p.metadata.planId === plan.id
+    );
+
+    if (!matchingProduct) return { productId: null, priceId: null };
+
+    const prices = await stripe.prices.list({
+      product: matchingProduct.id,
+      active: true,
+      limit: 50
+    });
+
+    const matchingPrice = prices.data.find(p => {
+      if (p.unit_amount === null) return false;
+      const amount = p.unit_amount / 100;
+      const interval = p.recurring?.interval || 'month';
+      return (
+        amount === plan.price &&
+        interval === (plan.billingCycle === 'ANNUAL' ? 'year' : 'month') &&
+        p.currency === 'eur'
+      );
+    });
 
     return {
-      productId,
-      priceId: price.id
+      productId: matchingProduct.id,
+      priceId: matchingPrice?.id || null
     };
-  } catch (error: any) {
-    console.error(`❌ Error creating Stripe product/price for ${plan.name}:`, error.message);
-    throw error;
+  } catch (error) {
+    console.warn(`Stripe search failed for ${plan.name}:`, (error as any).message);
+    return { productId: null, priceId: null };
   }
 }
 
+/**
+ * Create or reuse Stripe Product + Price (including free plan)
+ */
+async function ensureStripeProductAndPrice(plan: any): Promise<{ productId: string; priceId: string }> {
+  console.log(`Processing Stripe for ${plan.name} (${plan.billingCycle}) - ${plan.price} EUR`);
+
+  const existing = await findExistingStripeData(plan);
+
+  if (existing.productId && existing.priceId) {
+    console.log(`Already exists: Product ${existing.productId}, Price ${existing.priceId}`);
+    return { productId: existing.productId, priceId: existing.priceId };
+  }
+
+  console.log(`Creating in Stripe: ${plan.name}...`);
+
+  const product = await stripe.products.create({
+    name: `${plan.name} Plan`,
+    description: plan.description,
+    metadata: {
+      planId: plan.id,
+      planType: plan.type,
+      billingCycle: plan.billingCycle,
+      isFree: plan.price === 0 ? 'true' : 'false'
+    }
+  });
+
+  const priceParams: Stripe.PriceCreateParams = {
+    unit_amount: Math.round(plan.price * 100),
+    currency: 'eur',
+    product: product.id,
+    metadata: {
+      planId: plan.id,
+      planName: plan.name,
+      billingCycle: plan.billingCycle,
+      isFree: plan.price === 0 ? 'true' : 'false'
+    }
+  };
+
+  // Only add recurring for paid plans
+  if (plan.price > 0) {
+    priceParams.recurring = {
+      interval: plan.billingCycle === 'ANNUAL' ? 'year' : 'month'
+    };
+  }
+
+  const price = await stripe.prices.create(priceParams);
+
+  console.log(`Created: Product ${product.id}, Price ${price.id}`);
+  return { productId: product.id, priceId: price.id };
+}
+
 async function seedDatabase() {
-  console.log('🌱 Starting database seeding...');
+  console.log('🌱 Starting database seeding...\n');
 
   try {
-    // 1. Create Admin User
-    console.log('\n👤 Creating admin user...');
-    const existingAdmin = await prisma.user.findUnique({
-      where: { email: config.ADMIN_EMAIL || 'super@gmail.com' }
-    });
+    // 1. Admin User
+    const adminEmail = config.ADMIN_EMAIL || 'super@gmail.com';
+    const existingAdmin = await prisma.user.findUnique({ where: { email: adminEmail } });
 
     if (existingAdmin) {
-      console.log('✅ Admin user already exists:', existingAdmin.email);
+      console.log(`👤 Admin user exists: ${adminEmail}`);
     } else {
-      const hashPassword = await bcrypt.hash(config.ADMIN_PASSWORD || 'SabbirMridha12', 10);
-      
-      const admin = await prisma.user.create({
+      const hashed = await bcrypt.hash(config.ADMIN_PASSWORD || 'SabbirMridha12', 10);
+      await prisma.user.create({
         data: {
-          email: config.ADMIN_EMAIL || 'super@gmail.com',
-          password: hashPassword,
+          email: adminEmail,
+          password: hashed,
           role: 'ADMIN',
           isVerified: true,
           needPasswordChange: false,
           status: 'ACTIVE'
         }
       });
-
-     // console.log('✅ Admin user created:', admin.email);
+      console.log(`👤 Admin user created: ${adminEmail}`);
     }
 
-    // 2. Create Free Trial Plan (No Stripe product needed)
-   // console.log('\n🆓 Creating Free Trial plan...');
-    const existingFreePlan = await prisma.plan.findFirst({
-      where: { 
-        type: 'FREE',
-        billingCycle: 'MONTHLY'
-      }
-    });
+    // 2. Free Plan — created in Stripe with 0 EUR
+    console.log('\n🆓 Creating Free plan in Stripe + DB...');
+    const freeStripeData = await ensureStripeProductAndPrice(FREE_PLAN);
 
-    if (existingFreePlan) {
-      await prisma.plan.update({
-        where: { id: existingFreePlan.id },
-        data: {
-          name: FREE_TRIAL_PLAN.name,
-          description: FREE_TRIAL_PLAN.description,
-          type: FREE_TRIAL_PLAN.type,
-          billingCycle: FREE_TRIAL_PLAN.billingCycle,
-          price: FREE_TRIAL_PLAN.price,
-          currency: 'EUR',
-          supplierLimit: 5,
-          assessmentLimit: 10,
-          storageLimit: 10,
-          userLimit: 1,
-          features: FREE_TRIAL_PLAN.features,
-          trialDays: FREE_TRIAL_PLAN.trialDays,
-          isActive: FREE_TRIAL_PLAN.isActive,
-          isDefault: FREE_TRIAL_PLAN.isDefault,
-          isPopular: FREE_TRIAL_PLAN.isPopular
-        }
-      });
-     // console.log('📝 Free Trial plan updated');
+    const freePlanData = {
+      name: FREE_PLAN.name,
+      description: FREE_PLAN.description,
+      type: FREE_PLAN.type,
+      billingCycle: FREE_PLAN.billingCycle,
+      price: FREE_PLAN.price,
+      currency: 'EUR',
+      supplierLimit: FREE_PLAN.features.supplierLimit,
+      assessmentLimit: 10,
+      storageLimit: 10,
+      userLimit: 1,
+      features: FREE_PLAN.features,
+      trialDays: FREE_PLAN.trialDays,
+      isActive: true,
+      isDefault: true,
+      isPopular: false,
+      stripeProductId: freeStripeData.productId,
+      stripePriceId: freeStripeData.priceId
+    };
+
+    const existingFree = await prisma.plan.findFirst({ where: { type: 'FREE' } });
+
+    if (existingFree) {
+      await prisma.plan.update({ where: { id: existingFree.id }, data: freePlanData });
+      console.log('📝 Free plan updated');
     } else {
-      await prisma.plan.create({
-        data: {
-          name: FREE_TRIAL_PLAN.name,
-          description: FREE_TRIAL_PLAN.description,
-          type: FREE_TRIAL_PLAN.type,
-          billingCycle: FREE_TRIAL_PLAN.billingCycle,
-          price: FREE_TRIAL_PLAN.price,
-          currency: 'EUR',
-          supplierLimit: 5,
-          assessmentLimit: 10,
-          storageLimit: 10,
-          userLimit: 1,
-          features: FREE_TRIAL_PLAN.features,
-          trialDays: FREE_TRIAL_PLAN.trialDays,
-          isActive: FREE_TRIAL_PLAN.isActive,
-          isDefault: FREE_TRIAL_PLAN.isDefault,
-          isPopular: FREE_TRIAL_PLAN.isPopular
-        }
-      });
-     // console.log('✅ Free Trial plan created');
+      await prisma.plan.create({ data: freePlanData });
+      console.log('✅ Free plan created');
     }
 
-    // 3. Create Monthly Plans with Stripe Integration
-   // console.log('\n💰 Creating Monthly plans with Stripe...');
-    for (const planData of PRICING_PLANS.MONTHLY) {
+    // 3. Paid Plans
+    const allPaidPlans = [...PRICING_PLANS.MONTHLY, ...PRICING_PLANS.ANNUAL];
+
+    console.log('\n💰 Processing paid plans...');
+    for (const planData of allPaidPlans) {
       const existingPlan = await prisma.plan.findFirst({
-        where: { 
+        where: {
           type: planData.type,
-          billingCycle: 'MONTHLY'
+          billingCycle: planData.billingCycle
         }
       });
 
-      // Create Stripe product and price (only for paid plans)
-      let stripeData = null;
-      if (planData.price > 0) {
-        stripeData = await createStripeProductAndPrice(planData);
-      }
+      const stripeData = await ensureStripeProductAndPrice(planData);
 
-      const dbPlanData = {
+      const dbData = {
         name: planData.name,
         description: planData.description,
         type: planData.type,
@@ -371,122 +379,51 @@ async function seedDatabase() {
         originalPrice: (planData as any).originalPrice || null,
         currency: 'EUR',
         supplierLimit: planData.features.supplierLimit,
-        assessmentLimit: 100, // Default value
-        storageLimit: 100, // Default value
+        assessmentLimit: 100,
+        storageLimit: 100,
         userLimit: planData.type === 'STARTER' ? 3 : planData.type === 'PROFESSIONAL' ? 10 : null,
         features: planData.features,
         trialDays: planData.trialDays,
-        isActive: planData.isActive,
+        isActive: true,
         isDefault: false,
         isPopular: planData.isPopular || false,
-        stripeProductId: stripeData?.productId || null,
-        stripePriceId: stripeData?.priceId || null
+        stripeProductId: stripeData.productId,
+        stripePriceId: stripeData.priceId
       };
 
       if (existingPlan) {
-        await prisma.plan.update({
-          where: { id: existingPlan.id },
-          data: dbPlanData
-        });
-       // console.log(`📝 Monthly plan updated: ${planData.name}`);
+        await prisma.plan.update({ where: { id: existingPlan.id }, data: dbData });
+        console.log(`📝 Updated: ${planData.name} (${planData.billingCycle})`);
       } else {
-        await prisma.plan.create({
-          data: dbPlanData
-        });
-       // console.log(`✅ Monthly plan created: ${planData.name}`);
+        await prisma.plan.create({ data: dbData });
+        console.log(`✅ Created: ${planData.name} (${planData.billingCycle})`);
       }
     }
 
-    // 4. Create Annual Plans with Stripe Integration
-  //  console.log('\n📅 Creating Annual plans with Stripe...');
-    for (const planData of PRICING_PLANS.ANNUAL) {
-      const existingPlan = await prisma.plan.findFirst({
-        where: { 
-          type: planData.type,
-          billingCycle: 'ANNUAL'
-        }
-      });
-
-      // Create Stripe product and price (only for paid plans)
-      let stripeData = null;
-      if (planData.price > 0) {
-        stripeData = await createStripeProductAndPrice(planData);
-      }
-
-      const dbPlanData = {
-        name: planData.name,
-        description: planData.description,
-        type: planData.type,
-        billingCycle: planData.billingCycle,
-        price: planData.price,
-        originalPrice: (planData as any).originalPrice || null,
-        currency: 'EUR',
-        supplierLimit: planData.features.supplierLimit,
-        assessmentLimit: 100, // Default value
-        storageLimit: 100, // Default value
-        userLimit: planData.type === 'STARTER' ? 3 : planData.type === 'PROFESSIONAL' ? 10 : null,
-        features: planData.features,
-        trialDays: planData.trialDays,
-        isActive: planData.isActive,
-        isDefault: false,
-        isPopular: planData.isPopular || false,
-        stripeProductId: stripeData?.productId || null,
-        stripePriceId: stripeData?.priceId || null
-      };
-
-      if (existingPlan) {
-        await prisma.plan.update({
-          where: { id: existingPlan.id },
-          data: dbPlanData
-        });
-       // console.log(`📝 Annual plan updated: ${planData.name}`);
-      } else {
-        await prisma.plan.create({
-          data: dbPlanData
-        });
-       // console.log(`✅ Annual plan created: ${planData.name}`);
-      }
-    }
-
-    // 5. Verify all plans are created
-    //console.log('\n🔍 Verifying all plans...');
-    const allPlans = await prisma.plan.findMany({
-      where: { isDeleted: false }
+    // 4. Final Summary
+    const plans = await prisma.plan.findMany({
+      where: { isDeleted: false },
+      orderBy: [{ price: 'asc' }, { billingCycle: 'asc' }]
     });
 
-   // console.log(`📊 Total plans in database: ${allPlans.length}`);
-    
-    allPlans.forEach(plan => {
-      console.log(`  - ${plan.name} (${plan.billingCycle}): ${plan.price} EUR`);
-      if (plan.originalPrice) {
-        console.log(`    Discounted from: ${plan.originalPrice} EUR`);
-      }
-    });
+    console.log('\n🎉 Seeding completed successfully!');
+    console.log(`📊 Total plans: ${plans.length}\n`);
 
-   // console.log('\n🎉 Database seeding completed successfully!');
-   // console.log('✅ Admin user created/verified');
-   // console.log('✅ Free Trial plan created');
-   // console.log('✅ Monthly plans created with Stripe integration');
-  //  console.log('✅ Annual plans created with Stripe integration');
-   //// console.log('\n🔗 Stripe products and prices have been created');
-   // console.log('💳 Plans are ready for subscription management');
+    plans.forEach(p => {
+      console.log(`- ${p.name} (${p.billingCycle}): ${p.price} EUR${p.originalPrice ? ` (from ${p.originalPrice} EUR)` : ''}`);
+      console.log(`  🔗 Stripe Price: ${p.stripePriceId}`);
+    });
 
   } catch (error) {
-    console.error('❌ Seeding error:', error);
-    throw error;
+    console.error('❌ Seeding failed:', error);
+    process.exit(1);
+  } finally {
+    await prisma.$disconnect();
   }
 }
 
-// Only run if this file is executed directly
 if (require.main === module) {
-  seedDatabase()
-    .catch((error) => {
-      console.error('❌ Fatal seeding error:', error);
-      process.exit(1);
-    })
-    .finally(async () => {
-      await prisma.$disconnect();
-    });
+  seedDatabase();
 }
 
-export { seedDatabase, PRICING_PLANS, FREE_TRIAL_PLAN };
+export { seedDatabase, PRICING_PLANS, FREE_PLAN };

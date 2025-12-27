@@ -70,12 +70,9 @@ export const PaymentService = {
     planId: string,
     billingCycle: BillingCycle = 'MONTHLY'
   ): Promise<CheckoutSessionResponse> {
-    // Get user with vendor profile
     const user = await prisma.user.findUnique({
       where: { id: userId },
-      include: {
-        vendorProfile: true
-      }
+      include: { vendorProfile: true }
     });
 
     if (!user || !user.vendorProfile) {
@@ -83,9 +80,8 @@ export const PaymentService = {
     }
 
     const vendor = user.vendorProfile;
-    console.log("user",user);
-    console.log("vendor profile", vendor);
-    // Check if user already has an active subscription
+
+    // Prevent multiple active subscriptions
     const existingSubscription = await prisma.subscription.findUnique({
       where: { userId }
     });
@@ -97,41 +93,29 @@ export const PaymentService = {
       );
     }
 
-    // Get plan
     const plan = await this.getPlanById(planId);
-    if (!plan) {
-      throw new ApiError(httpStatus.NOT_FOUND, "Plan not found or inactive");
-    }
-
-    if (!plan.stripePriceId) {
-      throw new ApiError(httpStatus.BAD_REQUEST, "Plan does not have a Stripe price ID configured");
+    if (!plan || !plan.stripePriceId) {
+      throw new ApiError(httpStatus.NOT_FOUND, "Plan not found or not configured for Stripe");
     }
 
     // Get or create Stripe customer
     let stripeCustomerId = vendor.stripeCustomerId;
-    console.log("stripeCustomerId", stripeCustomerId);
-
     if (!stripeCustomerId) {
       const customer = await stripeService.createCustomer(
         user.email,
         vendor.companyName,
-        {
-          userId: user.id,
-          vendorId: vendor.id,
-          vendorName: vendor.companyName
-        }
+        { userId: user.id, vendorId: vendor.id, companyName: vendor.companyName }
       );
       stripeCustomerId = customer.id;
 
-      // Update vendor with Stripe customer ID
       await prisma.vendor.update({
         where: { id: vendor.id },
         data: { stripeCustomerId }
       });
     }
 
-    // Create subscription record in database
-    const trialEnd = plan.trialDays > 0 ? calculateTrialEndDate(plan.trialDays) : null;
+    // Pre-create subscription
+    const trialEnd = plan.trialDays > 0 ? calculateTrialEndDate(plan.trialDays) : undefined;
 
     const subscription = await prisma.subscription.upsert({
       where: { userId },
@@ -141,7 +125,6 @@ export const PaymentService = {
         status: 'PENDING',
         stripeCustomerId,
         trialEnd,
-        updatedAt: new Date()
       },
       create: {
         userId,
@@ -149,59 +132,54 @@ export const PaymentService = {
         billingCycle,
         status: 'PENDING',
         stripeCustomerId,
-        trialEnd
+        trialEnd,
       }
     });
 
-    // Create checkout session with Stripe
+    // Create Stripe Checkout Session
     const session = await stripeService.stripe.checkout.sessions.create({
       customer: stripeCustomerId,
-      line_items: [
-        {
-          price: plan.stripePriceId,
-          quantity: 1,
-        },
-      ],
+      line_items: [{ price: plan.stripePriceId, quantity: 1 }],
       mode: 'subscription',
       metadata: {
         userId: user.id,
         vendorId: vendor.id,
         planId: plan.id,
         subscriptionId: subscription.id,
-        planName: plan.name
+        planName: plan.name,
+        billingCycle,
       },
       subscription_data: {
         trial_period_days: plan.trialDays || undefined,
         metadata: {
           userId: user.id,
           vendorId: vendor.id,
-          subscriptionId: subscription.id
-        }
+          subscriptionId: subscription.id,
+        },
       },
       success_url: `${config.FRONTEND_URL}/dashboard/payment/success?session_id={CHECKOUT_SESSION_ID}`,
       cancel_url: `${config.FRONTEND_URL}/dashboard/pricing`,
       billing_address_collection: 'required',
+      customer_update: { address: 'auto', name: 'auto' },
+      phone_number_collection: { enabled: true },
       allow_promotion_codes: true,
-      customer_update: {
-        address: 'auto',
-        name: 'auto'
+      payment_method_types: ['card'],
+      payment_method_collection: 'always',
+      custom_text: {
+        submit: { message: 'You will be charged according to your selected plan.' },
       },
-      payment_method_collection: 'if_required'
     });
 
-    // Update subscription with session ID
+    // Save session ID
     await prisma.subscription.update({
       where: { id: subscription.id },
-      data: {
-        stripeSessionId: session.id,
-        updatedAt: new Date()
-      }
+      data: { stripeSessionId: session.id }
     });
 
     return {
       url: session.url!,
       sessionId: session.id,
-      subscriptionId: subscription.id
+      subscriptionId: subscription.id,
     };
   },
 
@@ -230,138 +208,111 @@ export const PaymentService = {
   },
 
   // ========== CONFIRM PAYMENT ==========
-  async confirmPayment(sessionId: string): Promise<{
-    success: boolean;
-    message: string;
-    data: any;
-  }> {
-    const session = await this.getSessionStatus(sessionId);
+ // ========== CONFIRM PAYMENT (ONLY ACTIVATE SUBSCRIPTION) ==========
+async confirmPayment(sessionId: string): Promise<{
+  success: boolean;
+  message: string;
+  data: any;
+}> {
+  console.log("Confirming payment for session:", sessionId);
 
-    if (session.status !== 'complete' || session.paymentStatus !== 'paid') {
-      throw new ApiError(httpStatus.BAD_REQUEST, "Payment not completed yet");
+  const session = await this.getSessionStatus(sessionId);
+
+  if (session.status !== 'complete' || session.paymentStatus !== 'paid') {
+    throw new ApiError(httpStatus.BAD_REQUEST, "Payment not completed yet");
+  }
+
+  const { userId, subscriptionId } = session.metadata;
+
+  if (!userId || !subscriptionId) {
+    throw new ApiError(httpStatus.BAD_REQUEST, "Invalid session metadata");
+  }
+
+  const subscription = await prisma.subscription.findUnique({
+    where: { id: subscriptionId },
+    include: {
+      plan: true,
+      user: { include: { vendorProfile: true } }
     }
+  });
 
-    const { userId, subscriptionId } = session.metadata;
+  if (!subscription) {
+    throw new ApiError(httpStatus.NOT_FOUND, "Subscription not found");
+  }
 
-    if (!userId || !subscriptionId) {
-      throw new ApiError(httpStatus.BAD_REQUEST, "Invalid session metadata");
+  const stripeSubscription = session.subscriptionId
+    ? await stripeService.stripe.subscriptions.retrieve(session.subscriptionId as string)
+    : null;
+
+  const updatedSubscription = await prisma.subscription.update({
+    where: { id: subscriptionId },
+    data: {
+      status: stripeSubscription?.status?.toUpperCase() as SubscriptionStatus || 'ACTIVE',
+      stripeSubscriptionId: stripeSubscription?.id || session.subscriptionId as string,
+      currentPeriodStart: (stripeSubscription as any)?.current_period_start
+        ? new Date((stripeSubscription as any).current_period_start * 1000)
+        : new Date(),
+      currentPeriodEnd: (stripeSubscription as any)?.current_period_end
+        ? new Date((stripeSubscription as any).current_period_end * 1000)
+        : null,
+      trialStart: stripeSubscription?.trial_start
+        ? new Date(stripeSubscription.trial_start * 1000)
+        : null,
+      trialEnd: stripeSubscription?.trial_end
+        ? new Date(stripeSubscription.trial_end * 1000)
+        : null,
     }
+  });
 
-    // Get subscription details
-    const subscription = await prisma.subscription.findUnique({
-      where: { id: subscriptionId },
-      include: {
-        plan: true,
-        user: {
-          include: {
-            vendorProfile: true
-          }
-        }
-      }
-    });
-
-    if (!subscription) {
-      throw new ApiError(httpStatus.NOT_FOUND, "Subscription not found");
-    }
-
-    // Get Stripe subscription details
-    const stripeSubscription = session.subscriptionId
-      ? await stripeService.stripe.subscriptions.retrieve(session.subscriptionId as string)
-      : null;
-
-    // Update subscription status
-    const updatedSubscription = await prisma.subscription.update({
-      where: { id: subscriptionId },
-      data: {
-        status: stripeSubscription?.status?.toUpperCase() as SubscriptionStatus || 'ACTIVE',
-        stripeSubscriptionId: stripeSubscription?.id || session.subscriptionId as string,
-        currentPeriodStart: stripeSubscription?.current_period_start
-          ? new Date(stripeSubscription.current_period_start * 1000)
-          : new Date(),
-        currentPeriodEnd: stripeSubscription?.current_period_end
-          ? new Date(stripeSubscription.current_period_end * 1000)
-          : null,
-        trialStart: stripeSubscription?.trial_start
-          ? new Date(stripeSubscription.trial_start * 1000)
-          : null,
-        trialEnd: stripeSubscription?.trial_end
-          ? new Date(stripeSubscription.trial_end * 1000)
-          : null,
-        updatedAt: new Date()
-      }
-    });
-
-    // Create payment record
-    const payment = await prisma.payment.create({
-      data: {
-        userId,
-        planId: subscription.planId,
-        subscriptionId: subscription.id,
-        amount: subscription.plan.price,
-        currency: subscription.plan.currency,
-        status: 'SUCCEEDED',
-        paymentType: 'SUBSCRIPTION',
-        stripePaymentId: session.paymentIntentId || `checkout_${sessionId}`,
-        stripeSessionId: sessionId,
-        stripeCustomerId: session.customerId as string,
-        billingEmail: session.customerEmail,
-        paidAt: new Date(),
-        metadata: {
-          sessionId,
-          planName: subscription.plan.name,
-          billingCycle: subscription.billingCycle
-        }
-      }
-    });
-
-    // Send confirmation email
-    if (subscription.user.vendorProfile?.businessEmail) {
-      try {
-        await mailtrapService.sendHtmlEmail({
-          to: subscription.user.vendorProfile.businessEmail,
-          subject: `🎉 Payment Confirmed - ${subscription.plan.name} Plan`,
-          html: `
-            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-              <h2 style="color: #333;">Payment Confirmed!</h2>
-              <p>Your subscription to the <strong>${subscription.plan.name}</strong> plan has been successfully activated.</p>
-              
-              <div style="background-color: #f8f9fa; padding: 20px; border-radius: 5px; margin: 20px 0;">
-                <h3 style="margin-top: 0;">Order Details</h3>
-                <p><strong>Plan:</strong> ${subscription.plan.name}</p>
-                <p><strong>Billing Cycle:</strong> ${subscription.billingCycle}</p>
-                <p><strong>Amount:</strong> ${subscription.plan.price} ${subscription.plan.currency}</p>
-                <p><strong>Payment Date:</strong> ${new Date().toLocaleDateString()}</p>
-                <p><strong>Payment ID:</strong> ${payment.id}</p>
-              </div>
-              
-              <p>Your account now has access to all features included in your plan. You can manage your subscription from your dashboard.</p>
-              
-              <div style="text-align: center; margin: 30px 0;">
-                <a href="${config.FRONTEND_URL}/dashboard" style="background-color: #007bff; color: white; padding: 12px 30px; text-decoration: none; border-radius: 5px; font-weight: bold;">
-                  Go to Dashboard
-                </a>
-              </div>
-              
-              <hr style="border: none; border-top: 1px solid #eee; margin: 20px 0;">
-              <p style="color: #666; font-size: 12px;">© ${new Date().getFullYear()} CyberNark. All rights reserved.</p>
+  // Send trial welcome email
+  if (subscription.user.vendorProfile?.businessEmail) {
+    try {
+      await mailtrapService.sendHtmlEmail({
+        to: subscription.user.vendorProfile.businessEmail,
+        subject: `🎉 Welcome to ${subscription.plan.name} — Your 14-Day Trial Has Started!`,
+        html: `
+          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+            <h2 style="color: #1a5fb4;">Welcome to CyberNark!</h2>
+            <p>Congratulations! Your <strong>${subscription.plan.name}</strong> subscription is now active with a <strong>14-day free trial</strong>.</p>
+            <p><strong>No payment required until January 10, 2026</strong>.</p>
+            
+            <div style="background-color: #f0f8ff; padding: 20px; border-radius: 8px; margin: 25px 0;">
+              <h3>Your Trial Details</h3>
+              <p><strong>Plan:</strong> ${subscription.plan.name}</p>
+              <p><strong>Trial Ends:</strong> January 10, 2026</p>
+              <p><strong>Price After Trial:</strong> ${subscription.plan.price} EUR/${subscription.billingCycle.toLowerCase()}</p>
             </div>
-          `
-        });
-      } catch (error) {
-        console.error("Failed to send payment confirmation email:", error);
-      }
+            
+            <p>You now have full access to all features. Explore the platform and see how CyberNark can help secure your supply chain.</p>
+            
+            <div style="text-align: center; margin: 35px 0;">
+              <a href="${config.FRONTEND_URL}/dashboard" style="background-color: #1a5fb4; color: white; padding: 14px 32px; text-decoration: none; border-radius: 6px; font-weight: bold; font-size: 16px;">
+                Go to Dashboard →
+              </a>
+            </div>
+            
+            <p style="color: #666; font-size: 14px;">
+              Questions? Contact support anytime.<br>
+              © ${new Date().getFullYear()} CyberNark. All rights reserved.
+            </p>
+          </div>
+        `
+      });
+    } catch (error) {
+      console.error("Failed to send trial welcome email:", error);
     }
+  }
 
-    return {
-      success: true,
-      message: "Payment confirmed and subscription activated successfully",
-      data: {
-        subscription: updatedSubscription,
-        payment,
-        plan: subscription.plan
-      }
-    };
-  },
+  return {
+    success: true,
+    message: "Subscription activated! Enjoy your 14-day free trial.",
+    data: {
+      subscription: updatedSubscription,
+      plan: subscription.plan,
+      trialEndDate: updatedSubscription.trialEnd
+    }
+  };
+},
 
   // ========== CREATE PORTAL SESSION ==========
   async createPortalSession(userId: string, returnUrl: string = '/dashboard'): Promise<{ url: string }> {
@@ -597,34 +548,34 @@ export const PaymentService = {
   },
 
   // ========== WEBHOOK HANDLERS ==========
+  // Only activate subscription — DO NOT create payment here
   async handleCheckoutSessionCompleted(session: any): Promise<void> {
-    console.log("🔄 Processing checkout.session.completed webhook", session);
+    console.log("Processing checkout.session.completed webhook", session.id);
 
-    const { userId, subscriptionId, vendorId, planId } = session.metadata || {};
+    const metadata = session.metadata || {};
+    const { userId, subscriptionId, vendorId } = metadata;
 
-    if (!userId || !subscriptionId || !vendorId || !planId) {
-      console.error("❌ Missing required metadata in session:", session.metadata);
+    if (!userId || !subscriptionId || !vendorId) {
+      console.error("Missing required metadata:", metadata);
       return;
     }
 
     try {
-      // Fetch subscription from Stripe
       const stripeSubscription = session.subscription
         ? await stripeService.stripe.subscriptions.retrieve(session.subscription as string)
         : null;
 
-      // Update subscription in database
       await prisma.subscription.update({
         where: { id: subscriptionId },
         data: {
-          status: stripeSubscription?.status?.toUpperCase() as SubscriptionStatus || 'ACTIVE',
-          stripeSubscriptionId: stripeSubscription?.id || session.subscription,
+          status: (stripeSubscription?.status?.toUpperCase() as SubscriptionStatus) || 'ACTIVE',
+          stripeSubscriptionId: stripeSubscription?.id || (session.subscription as string),
           stripeCustomerId: session.customer as string,
-          currentPeriodStart: stripeSubscription?.current_period_start
-            ? new Date(stripeSubscription.current_period_start * 1000)
+          currentPeriodStart: (stripeSubscription as any)?.current_period_start
+            ? new Date((stripeSubscription as any).current_period_start * 1000)
             : new Date(),
-          currentPeriodEnd: stripeSubscription?.current_period_end
-            ? new Date((stripeSubscription.current_period_end) * 1000)
+          currentPeriodEnd: (stripeSubscription as any)?.current_period_end
+            ? new Date((stripeSubscription as any).current_period_end * 1000)
             : null,
           trialStart: stripeSubscription?.trial_start
             ? new Date(stripeSubscription.trial_start * 1000)
@@ -632,53 +583,81 @@ export const PaymentService = {
           trialEnd: stripeSubscription?.trial_end
             ? new Date(stripeSubscription.trial_end * 1000)
             : null,
-          updatedAt: new Date()
-        }
+        },
       });
 
-      // Update vendor with Stripe customer ID
       await prisma.vendor.update({
         where: { id: vendorId },
-        data: {
-          stripeCustomerId: session.customer as string,
-          updatedAt: new Date()
-        }
+        data: { stripeCustomerId: session.customer as string },
       });
 
-      // Create payment record
-      const plan = await prisma.plan.findUnique({
-        where: { id: planId }
-      });
-
-      if (plan) {
-        await prisma.payment.create({
-          data: {
-            userId,
-            planId,
-            subscriptionId,
-            amount: plan.price,
-            currency: plan.currency,
-            status: 'SUCCEEDED',
-            paymentType: 'SUBSCRIPTION',
-            stripePaymentId: session.payment_intent as string,
-            stripeSessionId: session.id,
-            stripeCustomerId: session.customer as string,
-            billingEmail: session.customer_email,
-            paidAt: new Date(),
-            metadata: {
-              sessionId: session.id,
-              planName: plan.name,
-              checkoutSession: session
-            }
-          }
-        });
-      }
-
-      console.log(`✅ Successfully processed checkout for subscription ${subscriptionId}`);
+      console.log(`Subscription ${subscriptionId} activated successfully`);
     } catch (error: any) {
-      console.error("❌ Error processing checkout session:", error);
+      console.error("Error in checkout.session.completed:", error);
       throw error;
     }
+  },
+
+  // Only create payment when real money is charged
+  async handleInvoicePaymentSucceeded(invoice: any): Promise<void> {
+    console.log("Processing invoice.payment_succeeded webhook", invoice);
+
+    // // Skip $0 invoices (trials, setup, free periods)
+    // if (invoice.amount_paid <= 0) {
+    //   console.log(`Skipping $0 invoice ${invoice.id} (likely trial or setup)`);
+    //   return;
+    // }
+
+    const subscription = await prisma.subscription.findFirst({
+      where: { stripeSubscriptionId: invoice.subscription as string },
+      include: { plan: true, user: true }
+    });
+
+    if (!subscription) {
+      console.error(`Subscription not found for invoice ${invoice.id}`);
+      return;
+    }
+
+    // Prevent duplicates
+    const existingPayment = await prisma.payment.findFirst({
+      where: { stripeInvoiceId: invoice.id }
+    });
+
+    if (existingPayment) {
+      console.log(`Payment already recorded for invoice ${invoice.id}`);
+      return;
+    }
+
+    await prisma.payment.create({
+      data: {
+        userId: subscription.userId,
+        planId: subscription.planId,
+        subscriptionId: subscription.id,
+        amount: subscription.plan.price,
+        currency: subscription.plan.currency,
+         status: 'SUCCEEDED',
+        paymentType: 'SUBSCRIPTION',
+        stripePaymentId: invoice.payment_intent as string | null,
+        stripeInvoiceId: invoice.id,
+        stripeCustomerId: invoice.customer as string,
+        billingEmail: invoice.customer_email || subscription.user.email,
+        receiptUrl: invoice.invoice_pdf || invoice.hosted_invoice_url || null,
+        paidAt: new Date(invoice.status_transitions.paid_at * 1000),
+        metadata: {
+          invoiceId: invoice.id,
+          invoiceNumber: invoice.number,
+          billingReason: invoice.billing_reason,
+          periodStart: invoice.lines.data[0]?.period.start
+            ? new Date(invoice.lines.data[0].period.start * 1000)
+            : null,
+          periodEnd: invoice.lines.data[0]?.period.end
+            ? new Date(invoice.lines.data[0].period.end * 1000)
+            : null,
+        },
+      },
+    });
+
+    console.log(`Payment recorded: ${invoice.amount_paid / 100} ${invoice.currency.toUpperCase()}`);
   },
 
   async handleSubscriptionUpdated(subscription: any): Promise<void> {
@@ -739,45 +718,7 @@ export const PaymentService = {
     console.log(`✅ Marked subscription ${dbSubscription.id} as cancelled`);
   },
 
-  async handleInvoicePaymentSucceeded(invoice: any): Promise<void> {
-    console.log("🔄 Processing invoice.payment_succeeded webhook");
 
-    const subscription = await prisma.subscription.findFirst({
-      where: { stripeSubscriptionId: invoice.subscription as string },
-      include: { plan: true }
-    });
-
-    if (!subscription) {
-      console.error(`❌ Subscription not found for invoice ${invoice.id}`);
-      return;
-    }
-
-    // Create payment record for successful invoice
-    await prisma.payment.create({
-      data: {
-        userId: subscription.userId,
-        planId: subscription.planId,
-        subscriptionId: subscription.id,
-        amount: invoice.amount_paid / 100,
-        currency: invoice.currency.toUpperCase(),
-        status: 'SUCCEEDED',
-        paymentType: 'SUBSCRIPTION',
-        stripePaymentId: invoice.payment_intent as string,
-        stripeInvoiceId: invoice.id,
-        stripeCustomerId: invoice.customer as string,
-        billingEmail: invoice.customer_email,
-        paidAt: new Date(),
-        metadata: {
-          invoiceId: invoice.id,
-          invoiceNumber: invoice.number,
-          periodStart: invoice.period_start ? new Date(invoice.period_start * 1000) : null,
-          periodEnd: invoice.period_end ? new Date(invoice.period_end * 1000) : null
-        }
-      }
-    });
-
-    console.log(`✅ Created payment record for invoice ${invoice.id}`);
-  },
 
   async handleInvoicePaymentFailed(invoice: any): Promise<void> {
     console.log("🔄 Processing invoice.payment_failed webhook");

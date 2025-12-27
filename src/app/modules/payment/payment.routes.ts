@@ -4,6 +4,7 @@ import auth from '../../middlewares/auth';
 import { UserRole } from '@prisma/client';
 import validateRequest from '../../middlewares/validateRequest';
 import { PaymentController } from './payment.controller';
+import { createCheckoutSchema } from './payment.validation';
 
 const router = express.Router();
 
@@ -11,7 +12,7 @@ const router = express.Router();
 router.post(
   '/create-checkout-session',
   auth(UserRole.VENDOR),
-  
+  validateRequest(createCheckoutSchema),
   PaymentController.createCheckoutSession
 );
 

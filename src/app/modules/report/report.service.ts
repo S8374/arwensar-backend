@@ -1692,81 +1692,88 @@ export const ReportService = {
   },
 
   // ========== GET REPORTS ==========
-  async getReports(userId: string, options: any = {}): Promise<{ reports: Report[]; meta: any }> {
-    const {
-      page = 1,
-      limit = 20,
-      type,
-      status,
-      vendorId,
-      supplierId,
-      sortBy = 'createdAt',
-      sortOrder = 'desc'
-    } = options;
+// ========== GET REPORTS ==========
+async getReports(userId: string, options: any = {}): Promise<{ reports: Report[]; meta: any }> {
+  const {
+    page = 1,
+    limit = 20,
+    type,
+    status,
+    vendorId,
+    supplierId,
+    sortBy = 'createdAt',
+    sortOrder = 'desc'
+  } = options;
 
-    const skip = (page - 1) * limit;
+  // Convert string values to numbers
+  const pageNumber = Number(page);
+  const limitNumber = Number(limit);
+  const skip = (pageNumber - 1) * limitNumber;
 
-    // Validate permissions
-    const { finalVendorId, finalSupplierId } = await this.validateUserPermissions(
-      userId,
-      vendorId,
-      supplierId
-    );
+  // Validate permissions
+  const { finalVendorId, finalSupplierId } = await this.validateUserPermissions(
+    userId,
+    vendorId,
+    supplierId
+  );
 
-    const where: any = { isDeleted: false };
+  const where: any = { isDeleted: false };
 
-    // Apply permission-based filters
-    if (finalVendorId) {
-      where.vendorId = finalVendorId;
-    }
+  // Apply permission-based filters
+  if (finalVendorId) {
+    where.vendorId = finalVendorId;
+  }
 
-    if (finalSupplierId) {
-      where.supplierId = finalSupplierId;
-    }
+  if (finalSupplierId) {
+    where.supplierId = finalSupplierId;
+  }
 
-    if (type) {
-      where.reportType = type;
-    }
+  if (type) {
+    where.reportType = type;
+  }
 
-    if (status) {
-      where.status = status;
-    }
+  if (status) {
+    where.status = status;
+  }
 
-    const [reports, total] = await Promise.all([
-      prisma.report.findMany({
-        where,
-        include: {
-          creator: {
-            select: {
-              id: true,
-              email: true,
-              role: true
-            }
-          },
-          generatedFor: {
-            select: {
-              id: true,
-              email: true
-            }
+  console.log("Query where clause:", JSON.stringify(where, null, 2));
+  console.log("Skip:", skip, "Take:", limitNumber);
+
+  const [reports, total] = await Promise.all([
+    prisma.report.findMany({
+      where,
+      include: {
+        creator: {
+          select: {
+            id: true,
+            email: true,
+            role: true
           }
         },
-        orderBy: { [sortBy]: sortOrder },
-        skip,
-        take: limit
-      }),
-      prisma.report.count({ where })
-    ]);
+        generatedFor: {
+          select: {
+            id: true,
+            email: true
+          }
+        }
+      },
+      orderBy: { [sortBy]: sortOrder },
+      skip,
+      take: limitNumber // Use the converted number
+    }),
+    prisma.report.count({ where })
+  ]);
 
-    return {
-      reports,
-      meta: {
-        page,
-        limit,
-        total,
-        pages: Math.ceil(total / limit)
-      }
-    };
-  },
+  return {
+    reports,
+    meta: {
+      page: pageNumber,
+      limit: limitNumber,
+      total,
+      pages: Math.ceil(total / limitNumber)
+    }
+  };
+},
 
   // ========== GET REPORT BY ID ==========
   async getReportById(reportId: string, userId: string): Promise<Report | null> {
