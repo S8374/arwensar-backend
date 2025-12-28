@@ -40,6 +40,7 @@ router.post(
 
 router.get(
   '/',
+
   ReportController.getReports
 );
 

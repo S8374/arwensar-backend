@@ -44,7 +44,7 @@ router.get(
 
 router.get(
   "/plans/:planId",
-  auth("ADMIN"),
+  auth("ADMIN" , "SUPPLIER" ,"VENDOR"),
   AdminController.getPlanById
 );
 

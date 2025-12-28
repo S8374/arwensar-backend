@@ -14,8 +14,8 @@ model Plan {
   features        Json
   trialDays       Int          @default(14) @map("trial_days")
 
-  originalPrice   Decimal?     @map("original_price") @db.Decimal(10, 2) // For showing discounts
-  isPopular       Boolean      @default(false) @map("is_popular") // For highlighting popular plans
+  originalPrice   Decimal?     @map("original_price") @db.Decimal(10, 2) 
+  isPopular       Boolean      @default(false) @map("is_popular") 
 
   isActive        Boolean      @default(true) @map("is_active")
   isDefault       Boolean      @default(false) @map("is_default")

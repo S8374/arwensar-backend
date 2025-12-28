@@ -13,6 +13,7 @@ import { WebhookRoutes } from '../modules/webhook/webhook.routes';
 import { DocumentRoutes } from '../modules/documents/document.route';
 import { reportRoutes } from '../modules/report/report.route';
 import Minorouter from '../modules/upload/upload.route';
+import { activityRoutes } from '../modules/activity/activity.routes';
 
 const router = express.Router();
 
@@ -29,7 +30,8 @@ const moduleRoutes = [
   { path: '/problems', route: ProblemRoutes },
     { path: '/webhook', route: WebhookRoutes } ,// Webhook routes should be last
     { path: '/documents', route: DocumentRoutes }, // Document routes should be last
-    { path: '/uploade', route: Minorouter } // Document routes should be last
+    { path: '/uploade', route: Minorouter } ,// Document routes should be last
+    { path: '/activity', route: activityRoutes } // Document routes should be last
 
 ];
 

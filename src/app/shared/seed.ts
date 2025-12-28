@@ -23,16 +23,14 @@ const PRICING_PLANS = {
         supplierLimit: 25,
         complianceDashboard: true,
         alertAndReminder: true,
-        basicAssessment: true,
-        emailSupport: true,
-        documentUploads: 'limited',
-        nis2Compliance: false,
-        advancedAnalytics: false,
-        apiAccess: false,
+        initialandFullAssainment: true,
+        basicAlert: true,
+        massagesLimit: 'limited',
+        exportBasicReport: true,
         prioritySupport: false
       },
       description: 'Perfect for small businesses starting with supplier risk management',
-      trialDays: 14,
+      trialDays: 30,
       isActive: true,
       isPopular: false
     },
@@ -44,10 +42,10 @@ const PRICING_PLANS = {
       price: 399,
       features: {
         supplierLimit: 100,
-        complianceDashboard: true,
-        alertAndReminder: true,
-        basicAssessment: false,
-        fullAssessment: true,
+           massagesLimit: 'unlimited',
+         evidenceApprovall : true ,
+        advancedReporting : true ,
+        priorityReminder: true,
         expiryNotification: true,
         multiUserAccess: true,
         integrations: true,
@@ -68,89 +66,6 @@ const PRICING_PLANS = {
       type: 'ENTERPRISE' as PlanType,
       billingCycle: 'MONTHLY' as BillingCycle,
       price: 699,
-      features: {
-        supplierLimit: 999999,
-        complianceDashboard: true,
-        alertAndReminder: true,
-        basicAssessment: false,
-        fullAssessment: true,
-        expiryNotification: true,
-        multiUserAccess: true,
-        integrations: true,
-        prioritySupport: true,
-        apiAccess: true,
-        performanceAnalytics: true,
-        dedicatedAccount: true,
-        customReporting: true,
-        whiteLabel: false,
-        nis2Compliance: true,
-        advancedAnalytics: true
-      },
-      description: 'For large organizations requiring unlimited scale and dedicated support',
-      trialDays: 14,
-      isActive: true,
-      isPopular: false
-    }
-  ],
-  ANNUAL: [
-    {
-      id: 'starter-annual',
-      name: 'Starter',
-      type: 'STARTER' as PlanType,
-      billingCycle: 'ANNUAL' as BillingCycle,
-      price: 139,
-      originalPrice: 199,
-      features: {
-        supplierLimit: 25,
-        complianceDashboard: true,
-        alertAndReminder: true,
-        basicAssessment: true,
-        emailSupport: true,
-        documentUploads: 'limited',
-        nis2Compliance: false,
-        advancedAnalytics: false,
-        apiAccess: false,
-        prioritySupport: false
-      },
-      description: 'Perfect for small businesses starting with supplier risk management',
-      trialDays: 14,
-      isActive: true,
-      isPopular: false
-    },
-    {
-      id: 'business-annual',
-      name: 'Business',
-      type: 'PROFESSIONAL' as PlanType,
-      billingCycle: 'ANNUAL' as BillingCycle,
-      price: 279,
-      originalPrice: 399,
-      features: {
-        supplierLimit: 100,
-        complianceDashboard: true,
-        alertAndReminder: true,
-        basicAssessment: false,
-        fullAssessment: true,
-        expiryNotification: true,
-        multiUserAccess: true,
-        integrations: true,
-        prioritySupport: true,
-        emailSupport: true,
-        nis2Compliance: true,
-        advancedAnalytics: true,
-        apiAccess: true
-      },
-      description: 'For growing companies with expanding supplier networks',
-      trialDays: 14,
-      isActive: true,
-      isPopular: true
-    },
-    {
-      id: 'enterprise-annual',
-      name: 'Enterprise',
-      type: 'ENTERPRISE' as PlanType,
-      billingCycle: 'ANNUAL' as BillingCycle,
-      price: 489,
-      originalPrice: 699,
       features: {
         supplierLimit: 999999,
         complianceDashboard: true,
@@ -357,7 +272,7 @@ async function seedDatabase() {
     }
 
     // 3. Paid Plans
-    const allPaidPlans = [...PRICING_PLANS.MONTHLY, ...PRICING_PLANS.ANNUAL];
+    const allPaidPlans = [...PRICING_PLANS.MONTHLY];
 
     console.log('\n💰 Processing paid plans...');
     for (const planData of allPaidPlans) {

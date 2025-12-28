@@ -184,3 +184,11 @@ enum PaymentType {
   UPGRADE
   DOWNGRADE
 }
+
+enum DocumentStatus {
+  PENDING
+  UNDER_REVIEW
+  APPROVED
+  REJECTED
+  EXPIRED
+}

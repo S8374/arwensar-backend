@@ -52,12 +52,13 @@ export const ReportService = {
         }
         finalVendorId = requestedVendorId;
       }
-
+   
       if (requestedSupplierId) {
         // Verify supplier exists and get its vendor
         const supplier = await prisma.supplier.findUnique({
           where: { id: requestedSupplierId }
         });
+           console.log("Reqested supplier",supplier);
         if (!supplier) {
           throw new ApiError(httpStatus.NOT_FOUND, "Supplier not found");
         }

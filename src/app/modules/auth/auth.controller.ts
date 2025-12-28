@@ -7,7 +7,7 @@ import catchAsync from "../../shared/catchAsync";
 
 const registerVendor = catchAsync(async (req: Request, res: Response) => {
   const result = await AuthService.registerVendor(req.body);
-  
+
   sendResponse(res, {
     statusCode: httpStatus.CREATED,
     success: true,
@@ -21,7 +21,7 @@ const registerVendor = catchAsync(async (req: Request, res: Response) => {
 
 const verifyEmail = catchAsync(async (req: Request, res: Response) => {
   const user = await AuthService.verifyEmail(req.body);
-  
+
   sendResponse(res, {
     statusCode: httpStatus.OK,
     success: true,
@@ -32,7 +32,7 @@ const verifyEmail = catchAsync(async (req: Request, res: Response) => {
 
 const resendOTP = catchAsync(async (req: Request, res: Response) => {
   const result = await AuthService.resendOTP(req.body);
-  
+
   sendResponse(res, {
     statusCode: httpStatus.OK,
     success: true,
@@ -45,9 +45,10 @@ const login = catchAsync(async (req: Request, res: Response) => {
   const result = await AuthService.login({
     ...req.body,
     ip: req.ip,
+    req ,
     userAgent: req.get("User-Agent")
   });
-  
+
   // Set cookies
   res.cookie("accessToken", result.accessToken, {
     httpOnly: true,
@@ -55,14 +56,14 @@ const login = catchAsync(async (req: Request, res: Response) => {
     sameSite: "strict",
     maxAge: 60 * 60 * 1000 // 1 hour
   });
-  
+
   res.cookie("refreshToken", result.refreshToken, {
     httpOnly: true,
     secure: process.env.NODE_ENV === "production",
     sameSite: "strict",
     maxAge: 7 * 24 * 60 * 60 * 1000 // 7 days
   });
-  
+
   sendResponse(res, {
     statusCode: httpStatus.OK,
     success: true,
@@ -79,7 +80,7 @@ const login = catchAsync(async (req: Request, res: Response) => {
 
 const refreshToken = catchAsync(async (req: Request, res: Response) => {
   const refreshToken = req.cookies?.refreshToken || req.body.refreshToken;
-  
+
   if (!refreshToken) {
     return sendResponse(res, {
       statusCode: httpStatus.BAD_REQUEST,
@@ -88,9 +89,9 @@ const refreshToken = catchAsync(async (req: Request, res: Response) => {
       data: null
     });
   }
-  
+
   const result = await AuthService.refreshToken(refreshToken);
-  
+
   // Set new access token cookie
   res.cookie("accessToken", result.accessToken, {
     httpOnly: true,
@@ -98,7 +99,7 @@ const refreshToken = catchAsync(async (req: Request, res: Response) => {
     sameSite: "strict",
     maxAge: 60 * 60 * 1000 // 1 hour
   });
-  
+
   sendResponse(res, {
     statusCode: httpStatus.OK,
     success: true,
@@ -110,8 +111,9 @@ const refreshToken = catchAsync(async (req: Request, res: Response) => {
 });
 
 const forgotPassword = catchAsync(async (req: Request, res: Response) => {
+  console.log("res ponse", req.body);
   const result = await AuthService.forgotPassword(req.body);
-  
+
   sendResponse(res, {
     statusCode: httpStatus.OK,
     success: true,
@@ -121,8 +123,9 @@ const forgotPassword = catchAsync(async (req: Request, res: Response) => {
 });
 
 const resetPassword = catchAsync(async (req: Request, res: Response) => {
+  console.log("res pass", req.body);
   const result = await AuthService.resetPassword(req.body);
-  
+
   sendResponse(res, {
     statusCode: httpStatus.OK,
     success: true,
@@ -133,7 +136,7 @@ const resetPassword = catchAsync(async (req: Request, res: Response) => {
 
 const logout = catchAsync(async (req: Request, res: Response) => {
   const userId = req.user?.userId;
-  
+
   let result;
   if (userId) {
     result = await AuthService.logout(userId);
@@ -144,7 +147,7 @@ const logout = catchAsync(async (req: Request, res: Response) => {
   // Clear cookies regardless of user existence
   res.clearCookie("accessToken");
   res.clearCookie("refreshToken");
-  
+
   sendResponse(res, {
     statusCode: httpStatus.OK,
     success: true,
@@ -155,7 +158,7 @@ const logout = catchAsync(async (req: Request, res: Response) => {
 // Get current user (me)
 const getMe = catchAsync(async (req: Request, res: Response) => {
   const userId = req.user?.userId;
-  
+
   if (!userId) {
     return sendResponse(res, {
       statusCode: httpStatus.UNAUTHORIZED,
@@ -164,9 +167,9 @@ const getMe = catchAsync(async (req: Request, res: Response) => {
       data: null
     });
   }
-  
+
   const result = await AuthService.getMe(userId);
-  
+
   sendResponse(res, {
     statusCode: httpStatus.OK,
     success: true,

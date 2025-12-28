@@ -28,6 +28,8 @@ const getUserProfile = catchAsync(async (req: Request, res: Response) => {
 });
 
 const updateUserProfile = catchAsync(async (req: Request, res: Response) => {
+
+  console.log("come from to update profile", req.body , req.user)
   const userId = req.user?.userId;
   
   if (!userId) {
@@ -75,6 +77,7 @@ const updatePassword = catchAsync(async (req: Request, res: Response) => {
 });
 
 const getNotificationPreferences = catchAsync(async (req: Request, res: Response) => {
+
   const userId = req.user?.userId;
   
   if (!userId) {

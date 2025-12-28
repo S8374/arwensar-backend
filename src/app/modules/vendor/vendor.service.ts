@@ -483,7 +483,7 @@ async getVendorDashboardStats(vendorId: string): Promise<VendorDashboardStats> {
   // ========== CALCULATE ASSESSMENT STATS ==========
   calculateAssessmentStats(assessments: any[], suppliers: any[]) {
     const pendingAssessments = assessments.filter(a => 
-      a.status === 'DRAFT' || a.status === 'SUBMITTED'
+      a.status === 'DRAFT' || a.status === 'PENDING'
     ).length;
 
     const completedAssessments = assessments.filter(a => 
@@ -1140,8 +1140,10 @@ async getVendorDashboardStats(vendorId: string): Promise<VendorDashboardStats> {
             email: true,
             status: true,
             isVerified: true,
-            createdAt: true
-          }
+            createdAt: true,
+           activityLogs : true
+          },
+
         },
         assessmentSubmissions: {
           include: {
@@ -1174,7 +1176,9 @@ async getVendorDashboardStats(vendorId: string): Promise<VendorDashboardStats> {
             lastName: true
           }
         }
-      }
+      
+      },
+
     });
 
     if (!supplier) {

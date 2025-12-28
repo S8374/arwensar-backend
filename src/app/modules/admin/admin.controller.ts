@@ -6,16 +6,6 @@ import { AdminService } from "./admin.service";
 import { paginationHelper } from "../../helper/paginationHelper";
 import catchAsync from "../../shared/catchAsync";
 
-declare global {
-  namespace Express {
-    interface Request {
-      user?: {
-        userId: string;
-        [key: string]: any;
-      };
-    }
-  }
-}
 
 const getDashboardStats = catchAsync(async (req: Request, res: Response) => {
   const stats = await AdminService.getDashboardStats();

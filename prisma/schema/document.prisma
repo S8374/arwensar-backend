@@ -8,12 +8,12 @@ model Document {
   mimeType    String         @map("mime_type")
   description String?
   
-  // Document Metadata
-  category    String?        // e.g., "Certificate", "Contract", "Insurance", "License"
+ 
+  category    String?        
   expiryDate  DateTime?      @map("expiry_date")
   
   // Status and Review
-  status      DocumentStatus @default(PENDING) // PENDING, APPROVED, REJECTED
+  status      DocumentStatus @default(PENDING) 
   reviewedAt  DateTime?      @map("reviewed_at")
   reviewedBy  String?        @map("reviewed_by")
   reviewNotes String?        @map("review_notes")
@@ -42,11 +42,3 @@ model Document {
   @@index([createdAt])
 }
 
-// Add DocumentStatus enum
-enum DocumentStatus {
-  PENDING
-  UNDER_REVIEW
-  APPROVED
-  REJECTED
-  EXPIRED
-}

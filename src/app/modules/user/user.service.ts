@@ -64,8 +64,11 @@ export const UserService = {
   // ========== UPDATE USER PROFILE ==========
   async updateUserProfile(userId: string, data: any): Promise<User> {
     const user = await prisma.user.findUnique({
-      where: { id: userId }
+      where: { id: userId },
+      include: { vendorProfile: true }
     });
+
+    console.log("User found to profile update", user);
 
     if (!user) {
       throw new ApiError(httpStatus.NOT_FOUND, "User not found");
@@ -73,21 +76,26 @@ export const UserService = {
 
     const updateData: any = {};
 
-    if (data.firstName || data.lastName) {
-      updateData.vendorProfile = {
-        update: {
-          firstName: data.firstName,
-          lastName: data.lastName
-        }
-      };
-    }
-
-    if (data.phoneNumber) {
-      updateData.phoneNumber = data.phoneNumber;
-    }
-
+    // ========== USER TABLE UPDATES ==========
     if (data.profileImage) {
       updateData.profileImage = data.profileImage;
+    }
+
+    if (data.phoneNumber || data.contactNumber) {
+      updateData.phoneNumber = data.phoneNumber ?? data.contactNumber;
+    }
+
+    // ========== VENDOR PROFILE UPDATES ==========
+    if (user.role === "VENDOR" && user.vendorId) {
+      updateData.vendorProfile = {
+        update: {
+          ...(data.firstName && { firstName: data.firstName }),
+          ...(data.lastName && { lastName: data.lastName }),
+          ...(data.companyName && { companyName: data.companyName }),
+          ...(data.contactNumber && { contactNumber: data.contactNumber }),
+          ...(data.industryType && { industryType: data.industryType }),
+        },
+      };
     }
 
     const updatedUser = await prisma.user.update({
@@ -95,23 +103,25 @@ export const UserService = {
       data: updateData,
       include: {
         vendorProfile: true,
-        supplierProfile: true
-      }
+        supplierProfile: true,
+      },
     });
 
-    // Create activity log
+    console.log("Updated user", updatedUser);
+
     await prisma.activityLog.create({
       data: {
         userId,
         action: "UPDATE_PROFILE",
         entityType: "USER",
         entityId: userId,
-        details: { updatedFields: Object.keys(data) }
-      }
+        details: { updatedFields: Object.keys(data) },
+      },
     });
 
     return updatedUser;
-  },
+  }
+  ,
 
   // ========== UPDATE PASSWORD ==========
   async updatePassword(userId: string, data: any): Promise<{ message: string }> {
@@ -195,44 +205,52 @@ export const UserService = {
   },
 
   // ========== UPDATE NOTIFICATION PREFERENCES ==========
-  // ========== UPDATE NOTIFICATION PREFERENCES ==========
   async updateNotificationPreferences(
     userId: string,
     payload: any
   ): Promise<NotificationPreferences> {
 
-    const cleanData: any = {
-      emailNotifications: payload.emailNotifications,
-      pushNotifications: payload.pushNotifications,
-      riskAlerts: payload.riskAlerts,
-      contractReminders: payload.contractReminders,
-      complianceUpdates: payload.complianceUpdates,
-      assessmentReminders: payload.assessmentReminders,
-      problemAlerts: payload.problemAlerts,
-      reportAlerts: payload.reportAlerts,
-      paymentAlerts: payload.paymentAlerts,
-      messageAlerts: payload.messageAlerts,
-      digestFrequency: payload.digestFrequency,
-      quietHoursStart: payload.quietHoursStart,
-      quietHoursEnd: payload.quietHoursEnd,
-    };
+    const cleanData: any = {};
 
-    // remove undefined fields
-    Object.keys(cleanData).forEach(
-      key => cleanData[key] === undefined && delete cleanData[key]
-    );
+    const allowedFields = [
+      "emailNotifications",
+      "pushNotifications",
+      "riskAlerts",
+      "contractReminders",
+      "complianceUpdates",
+      "assessmentReminders",
+      "problemAlerts",
+      "reportAlerts",
+      "paymentAlerts",
+      "messageAlerts",
+      "digestFrequency",
+      "quietHoursStart",
+      "quietHoursEnd",
+    ];
 
-    return prisma.notificationPreferences.upsert({
+    for (const field of allowedFields) {
+      if (payload[field] !== undefined) {
+        cleanData[field] = payload[field];
+      }
+    }
+
+    const updatedPreferences = await prisma.notificationPreferences.upsert({
       where: { userId },
       create: {
         userId,
-        ...cleanData
+        ...cleanData,
       },
-      update: cleanData
+      update: {
+        ...cleanData,
+      },
     });
-  }
-  ,
 
+    // ✅ CONSOLE UPDATED DATA
+    console.log("Notification preferences updated:", updatedPreferences);
+
+    return updatedPreferences;
+  }
+,
   // ========== GET ACTIVITY LOGS ==========
   async getActivityLogs(userId: string, options: any = {}) {
     const { page = 1, limit = 20, sortBy = 'createdAt', sortOrder = 'desc' } = options;

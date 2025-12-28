@@ -260,120 +260,144 @@ export const AuthService = {
     };
   },
 
-  // ========== LOGIN ==========
-  // Then update the login method to fetch subscription through user
-  async login(payload: any): Promise<LoginResponse> {
-    const { email, password } = payload;
 
-    const user = await prisma.user.findUnique({
-      where: { email }
-    });
 
-    if (!user) {
-      throw new ApiError(httpStatus.NOT_FOUND, "User not found");
+// ========== LOGIN ==========
+async login(payload: any, req?: any): Promise<LoginResponse> {
+  const { email, password } = payload;
+
+  const user = await prisma.user.findUnique({
+    where: { email }
+  });
+
+  if (!user) {
+    throw new ApiError(httpStatus.NOT_FOUND, "User not found");
+  }
+
+  if (user.status !== "ACTIVE") {
+    throw new ApiError(httpStatus.FORBIDDEN, "Your account is not active");
+  }
+
+  if (!user.isVerified) {
+    throw new ApiError(httpStatus.FORBIDDEN, "Please verify your email first");
+  }
+
+  const isPasswordValid = await bcrypt.compare(password, user.password);
+  if (!isPasswordValid) {
+    throw new ApiError(httpStatus.UNAUTHORIZED, "Invalid credentials");
+  }
+
+  // === SAFE & CORRECT IP EXTRACTION (Server-Side) ===
+  const getClientIp = (request: any): string => {
+    if (!request || !request.headers) return "unknown";
+
+    const forwarded = request.headers["x-forwarded-for"];
+    if (forwarded) {
+      // x-forwarded-for can be a comma-separated list
+      return (Array.isArray(forwarded) ? forwarded[0] : forwarded.split(",")[0]).trim();
     }
 
-    if (user.status !== "ACTIVE") {
-      throw new ApiError(httpStatus.FORBIDDEN, "Your account is not active");
-    }
+    return (
+      request.headers["x-real-ip"] ||
+      request.headers["cf-connecting-ip"] ||
+      request.headers["true-client-ip"] ||
+      request.connection?.remoteAddress ||
+      request.socket?.remoteAddress ||
+      request.ip ||
+      "unknown"
+    );
+  };
 
-    if (!user.isVerified) {
-      throw new ApiError(httpStatus.FORBIDDEN, "Please verify your email first");
-    }
+  const clientIp = getClientIp(req);
+  const userAgent = req?.headers["user-agent"] || payload.userAgent || "unknown";
 
-    const isPasswordValid = await bcrypt.compare(password, user.password);
-    if (!isPasswordValid) {
-      throw new ApiError(httpStatus.UNAUTHORIZED, "Invalid credentials");
-    }
+  // Update last login timestamp
+  await prisma.user.update({
+    where: { id: user.id },
+    data: { lastLoginAt: new Date() }
+  });
 
-    // Update last login
-    await prisma.user.update({
-      where: { id: user.id },
-      data: { lastLoginAt: new Date() }
-    });
-
-    // Create activity log
-    await prisma.activityLog.create({
-      data: {
-        userId: user.id,
-        action: "LOGIN",
-        entityType: "USER",
-        entityId: user.id,
-        details: { ip: payload.ip, userAgent: payload.userAgent }
+  // Create activity log with accurate IP and user agent
+  await prisma.activityLog.create({
+    data: {
+      userId: user.id,
+      action: "LOGIN",
+      entityType: "USER",
+      entityId: user.id,
+      ipAddress: clientIp,
+      userAgent: userAgent,
+      details: {
+        ip: clientIp,
+        userAgent: userAgent,
+        timestamp: new Date().toISOString(),
+        method: "email_password"
       }
+    }
+  });
+
+  // Load vendor profile and subscription
+  let vendor: (Vendor & {
+    subscription?: Subscription & { plan: Plan } | null;
+  }) | undefined = undefined;
+
+  if (user.role === "VENDOR" && user.vendorId) {
+    const vendorData = await prisma.vendor.findUnique({
+      where: { id: user.vendorId }
     });
 
-    // Prepare response data
-    let vendor: (Vendor & {
-      subscription?: Subscription & {
-        plan: Plan;
-      } | null;
-    }) | undefined = undefined;
-    let supplier = null;
-
-    if (user.role === "VENDOR" && user.vendorId) {
-      // First get vendor
-      const vendorData = await prisma.vendor.findUnique({
-        where: { id: user.vendorId }
+    if (vendorData) {
+      const subscription = await prisma.subscription.findUnique({
+        where: { userId: user.id },
+        include: { plan: true }
       });
 
-      if (vendorData) {
-        // Then get subscription through user
-        const subscription = await prisma.subscription.findUnique({
-          where: { userId: user.id },
-          include: {
-            plan: true
-          }
-        });
-
-        vendor = {
-          ...vendorData,
-          subscription: subscription || undefined
-        };
-      }
+      vendor = {
+        ...vendorData,
+        subscription: subscription || undefined
+      };
     }
+  }
 
-    if (user.role === "SUPPLIER" && user.supplierId) {
-      supplier = await prisma.supplier.findUnique({
-        where: { id: user.supplierId },
-        include: {
-          vendor: {
-            select: {
-              id: true,
-              companyName: true
-            }
-          }
+  // Load supplier profile
+  let supplier = null;
+  if (user.role === "SUPPLIER" && user.supplierId) {
+    supplier = await prisma.supplier.findUnique({
+      where: { id: user.supplierId },
+      include: {
+        vendor: {
+          select: { id: true, companyName: true }
         }
-      });
-    }
+      }
+    });
+  }
 
-    // Generate tokens
-    const accessToken = jwtHelper.generateToken(
-      {
-        userId: user.id,
-        email: user.email,
-        role: user.role,
-        vendorId: vendor?.id,
-        supplierId: supplier?.id
-      },
-      config.jwt.jwt_secret as string,
-      config.jwt.expires_in as string
-    );
+  // Generate tokens
+  const accessToken = jwtHelper.generateToken(
+    {
+      userId: user.id,
+      email: user.email,
+      role: user.role,
+      vendorId: vendor?.id,
+      supplierId: supplier?.id
+    },
+    config.jwt.jwt_secret as string,
+    config.jwt.expires_in as string
+  );
 
-    const refreshToken = jwtHelper.generateToken(
-      { userId: user.id },
-      config.jwt.refresh_token_secret as string,
-      config.jwt.refresh_token_expires_in as string
-    );
+  const refreshToken = jwtHelper.generateToken(
+    { userId: user.id },
+    config.jwt.refresh_token_secret as string,
+    config.jwt.refresh_token_expires_in as string
+  );
 
-    return {
-      user,
-      vendor,
-      supplier,
-      accessToken,
-      refreshToken
-    };
-  },
+  return {
+    user,
+    vendor,
+    supplier,
+    accessToken,
+    refreshToken
+  };
+},
 
   // ========== REFRESH TOKEN ==========
   async refreshToken(refreshToken: string): Promise<{ accessToken: string }> {
@@ -413,7 +437,7 @@ export const AuthService = {
     const user = await prisma.user.findUnique({
       where: { email: payload.email }
     });
-
+    console.log("find the user", user);
     if (!user) {
       throw new ApiError(httpStatus.NOT_FOUND, "User not found");
     }
@@ -534,35 +558,53 @@ export const AuthService = {
   },
 
   // ========== LOGOUT ==========
-  async logout(userId: string): Promise<{ message: string }> {
+  // ========== LOGOUT ==========
+  async logout(userId: string, req?: any): Promise<{ message: string }> {
     try {
-      // First, check if the user exists
       const userExists = await prisma.user.findUnique({
         where: { id: userId },
         select: { id: true }
       });
 
-      // Only create activity log if user exists
       if (userExists) {
+        // Extract IP and User Agent (same logic as login)
+        const getClientIp = (request: any): string => {
+          return (
+            (request.headers["x-forwarded-for"] as string)?.split(",")[0]?.trim() ||
+            (request.headers["x-real-ip"] as string) ||
+            (request.headers["cf-connecting-ip"] as string) ||
+            request.connection?.remoteAddress ||
+            request.socket?.remoteAddress ||
+            request.ip ||
+            "unknown"
+          );
+        };
+
+        const clientIp = req ? getClientIp(req) : "unknown";
+        const userAgent = req?.headers["user-agent"] || "unknown";
+
         await prisma.activityLog.create({
           data: {
             userId,
             action: "LOGOUT",
             entityType: "USER",
-            entityId: userId
+            entityId: userId,
+            ipAddress: clientIp,
+            userAgent: userAgent,
+            details: {
+              ip: clientIp,
+              userAgent: userAgent,
+              timestamp: new Date().toISOString()
+            }
           }
         });
       }
 
-      return {
-        message: "Logged out successfully"
-      };
+      return { message: "Logged out successfully" };
     } catch (error) {
-      // Log the error but still return success for logout
-      console.error("Error creating activity log during logout:", error);
-      return {
-        message: "Logged out successfully"
-      };
+      console.error("Error creating logout activity log:", error);
+      // Still return success — logout should not fail due to logging
+      return { message: "Logged out successfully" };
     }
   },
 
