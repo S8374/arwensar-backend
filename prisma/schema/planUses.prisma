@@ -1,0 +1,41 @@
+model PlanLimitData {
+  id             String       @id @default(uuid())
+  subscriptionId String       @unique
+  subscription   Subscription @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
+
+  // Monthly usage counters (reset each month)
+  suppliersUsed        Int? @default(0) @map("suppliers_used")
+  assessmentsUsed      Int? @default(0) @map("assessments_used")
+  messagesUsed         Int? @default(0) @map("messages_used")
+  documentReviewsUsed  Int? @default(0) @map("document_reviews_used")
+  reportCreate         Int? @default(0) @map("reports_used")
+  reportsGeneratedUsed Int? @default(0) @map("reports_generated_used")
+  notificationsSend    Int? @default(0) @map("notifications_send")
+  test                 Int? @default(0) @map("test")
+  month                Int? @map("month")
+  year                 Int? @map("year")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([month, year])
+  @@index([subscriptionId])
+  @@map("plan_limited_data")
+}
+
+model PlanChangeHistory {
+  id              String       @id @default(uuid())
+  subscriptionId  String
+  subscription    Subscription @relation(fields: [subscriptionId], references: [id])
+  previousPlanId  String
+  newPlanId       String
+  previousPlan    Plan         @relation("PreviousPlan", fields: [previousPlanId], references: [id])
+  newPlan         Plan         @relation("NewPlan", fields: [newPlanId], references: [id])
+  changedAt       DateTime     @default(now())
+  changedBy       String?
+  reason          String?
+  stripeSessionId String?
+
+  @@index([subscriptionId])
+  @@index([changedAt])
+}

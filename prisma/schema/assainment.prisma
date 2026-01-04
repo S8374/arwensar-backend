@@ -1,0 +1,174 @@
+
+model Assessment {
+  id          String    @id @default(uuid())
+  examId      String    @unique @map("exam_id")
+  title       String
+  description String?
+
+  isActive    Boolean   @default(true) @map("is_active")
+  isTemplate  Boolean   @default(false) @map("is_template")
+  stage       AssessmentStage @default(FULL) @map("stage")
+
+  version     String    @default("1.0")
+  totalPoints Int       @default(100) @map("total_points")
+  passingScore Decimal? @db.Decimal(5, 2) @map("passing_score")
+  timeLimit   Int?      @map("time_limit")
+
+  // FIX: Add the createdBy field here
+  createdBy   String    @map("created_by")
+  updatedBy   String?   @map("updated_by")
+
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+
+  // FIX: Update the relation to reference the createdBy field
+  createdByUser User    @relation("UserCreatedAssessments", fields: [createdBy], references: [id])
+
+  vendorId    String    @map("vendor_id")
+
+  categories  AssessmentCategory[]
+  submissions AssessmentSubmission[]
+
+  @@index([createdBy])
+  @@index([vendorId])
+  @@index([isActive])
+  @@index([createdAt])
+  @@index([examId])
+  @@index([stage])
+  @@map("assessments")
+}
+model AssessmentCategory {
+  id          String   @id @default(uuid())
+  categoryId  String   @map("category_id")
+  title       String
+  description String?
+  order       Int      @default(1)
+  weight      Decimal? @default(100) @db.Decimal(5, 2)
+  maxScore    Int      @default(100) @map("max_score")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  assessmentId String
+  assessment   Assessment           @relation(fields: [assessmentId], references: [id], onDelete: Cascade)
+  questions    AssessmentQuestion[]
+
+  @@unique([assessmentId, categoryId])
+  @@unique([assessmentId, order])
+  @@index([assessmentId])
+  @@map("assessment_categories")
+}
+
+model AssessmentQuestion {
+  id           String     @id @default(uuid())
+  questionId   Int        @map("question_id")
+  question     String
+  description  String?
+  order        Int        @default(1)
+  isDocument   Boolean    @default(false) @map("is_document")
+  isInputField Boolean    @default(false) @map("is_input_field")
+  answerType   AnswerType @default(YES) @map("answer_type")
+  weight       Decimal?   @default(100) @db.Decimal(5, 2)
+  maxScore     Int        @default(10) @map("max_score")
+  helpText     String?    @map("help_text")
+
+  // BIV Category
+  bivCategory      String? @map("biv_category") // BUSINESS, INTEGRITY, AVAILABILITY
+  evidenceRequired Boolean @default(false) @map("evidence_required")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  categoryId String
+  category   AssessmentCategory @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  answers    AssessmentAnswer[]
+
+  @@unique([categoryId, questionId])
+  @@unique([categoryId, order])
+  @@index([categoryId])
+  @@index([bivCategory])
+  @@map("assessment_questions")
+}
+
+model AssessmentSubmission {
+  id           String     @id @default(uuid())
+  assessmentId String
+  assessment   Assessment @relation(fields: [assessmentId], references: [id], onDelete: Cascade)
+
+  userId String
+  user   User   @relation("UserSubmissions", fields: [userId], references: [id], onDelete: Cascade)
+
+  supplierId String   @map("supplier_id")
+  supplier   Supplier @relation(fields: [supplierId], references: [id], onDelete: Cascade)
+
+  vendorId String @map("vendor_id")
+
+  status            SubmissionStatus @default(DRAFT)
+  stage             AssessmentStage  @default(FULL) @map("stage")
+  totalQuestions    Int              @map("total_questions")
+  answeredQuestions Int              @map("answered_questions")
+  progress          Int              @default(0)
+
+  score             Decimal?     @db.Decimal(5, 2)
+  riskScore         Decimal?     @map("risk_score") @db.Decimal(5, 2)
+  riskLevel         Criticality? @map("risk_level")
+  businessScore     Decimal?     @map("business_score") @db.Decimal(5, 2)
+  integrityScore    Decimal?     @map("integrity_score") @db.Decimal(5, 2)
+  availabilityScore Decimal?     @map("availability_score") @db.Decimal(5, 2)
+  bivScore          Decimal?     @map("biv_score") @db.Decimal(5, 2)
+  riskComponents    Json?        @map("risk_components")
+  riskBreakdown     Json?        @map("risk_breakdown")
+  riskMetadata      Json?        @map("risk_metadata")
+ 
+ // ADD THESE NEW FIELDS
+  complianceRate      Decimal?         @db.Decimal(5, 2) @map("compliance_rate")
+  evidenceStatus      String?          @map("evidence_status") // OVERALL, PARTIAL, NONE
+  
+  startedAt   DateTime? @map("started_at")
+  submittedAt DateTime? @map("submitted_at")
+  reviewedAt  DateTime? @map("reviewed_at")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+
+  reviewedBy     String? @map("reviewed_by")
+  reviewComments String? @map("review_comments")
+  reviewerReport String? @map("reviewer_report")
+
+  answers AssessmentAnswer[]
+
+  @@unique([supplierId, assessmentId])
+  @@index([userId])
+  @@index([supplierId])
+  @@index([vendorId])
+  @@index([assessmentId])
+  @@index([status])
+  @@index([submittedAt])
+  @@index([createdAt])
+  @@index([stage])
+  @@map("assessment_submissions")
+}
+
+model AssessmentAnswer {
+  id       String     @id @default(uuid())
+  answer   AnswerType
+  evidence String?
+  comments String?
+  score    Decimal?   @db.Decimal(5, 2)
+  maxScore Int        @default(10) @map("max_score")
+
+  evidenceStatus          EvidenceStatus @default(PENDING) @map("evidence_status")
+  evidenceRejectionReason String?        @map("evidence_rejection_reason")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  questionId String
+  question   AssessmentQuestion @relation(fields: [questionId], references: [id], onDelete: Cascade)
+
+  submissionId String
+  submission   AssessmentSubmission @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+
+  @@unique([submissionId, questionId])
+  @@index([evidenceStatus])
+  @@map("assessment_answers")
+}

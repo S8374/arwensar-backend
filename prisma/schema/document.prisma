@@ -1,0 +1,44 @@
+// Add to your schema.prisma
+model Document {
+  id          String         @id @default(uuid())
+  name        String
+  type        String
+  url         String
+  fileSize    Float          @map("file_size")
+  mimeType    String         @map("mime_type")
+  description String?
+  
+ 
+  category    String?        
+  expiryDate  DateTime?      @map("expiry_date")
+  
+  // Status and Review
+  status      DocumentStatus @default(PENDING) 
+  reviewedAt  DateTime?      @map("reviewed_at")
+  reviewedBy  String?        @map("reviewed_by")
+  reviewNotes String?        @map("review_notes")
+  isVerified  Boolean        @default(false) @map("is_verified")
+  
+  uploadedById String
+  uploadedBy   User          @relation(fields: [uploadedById], references: [id])
+  
+  supplierId   String?       @map("supplier_id")
+  
+  vendorId     String?       @map("vendor_id")
+  
+  isPrivate    Boolean       @default(false) @map("is_private")
+  accessRoles  UserRole[]
+  
+  createdAt    DateTime      @default(now()) @map("created_at")
+  updatedAt    DateTime      @updatedAt @map("updated_at")
+  
+  @@map("documents")
+  @@index([uploadedById])
+  @@index([supplierId])
+  @@index([vendorId])
+  @@index([status])
+  @@index([category])
+  @@index([expiryDate])
+  @@index([createdAt])
+}
+

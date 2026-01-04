@@ -1,0 +1,64 @@
+
+model Problem {
+  id                String          @id @default(uuid())
+  title             String
+  description       String
+  type              ProblemType     @default(OTHER)
+  direction         ProblemDirection
+  priority          Priority        @default(MEDIUM)
+  status            ProblemStatus   @default(OPEN)
+  
+  reportedById      String
+  reportedBy        User            @relation("ProblemReporter", fields: [reportedById], references: [id], onDelete: Cascade)
+  
+  assignedToId      String?
+  assignedTo        User?           @relation("ProblemAssignee", fields: [assignedToId], references: [id], onDelete: SetNull)
+  
+  vendorId          String          @map("vendor_id")
+  supplierId        String          @map("supplier_id")
+  
+  resolutionNotes   String?         @map("resolution_notes")
+  resolvedAt        DateTime?       @map("resolved_at")
+  dueDate           DateTime?       @map("due_date")
+  slaBreached       Boolean         @default(false) @map("sla_breached")
+  firstResponseAt   DateTime?       @map("first_response_at")
+  
+  attachments       String[]
+  internalNotes     String?         @map("internal_notes")
+  supplierNotes     String?         @map("supplier_notes")
+  
+  createdAt         DateTime        @default(now()) @map("created_at")
+  updatedAt         DateTime        @updatedAt @map("updated_at")
+  lastUpdatedAt     DateTime        @updatedAt @map("last_updated_at")
+  
+  messages          ProblemMessage[]
+  
+  @@map("problems")
+  @@index([reportedById])
+  @@index([assignedToId])
+  @@index([vendorId, supplierId])
+  @@index([status, priority])
+  @@index([createdAt])
+  @@index([dueDate])
+}
+
+model ProblemMessage {
+  id                String    @id @default(uuid())
+  content           String
+  isInternal        Boolean   @default(false) @map("is_internal")
+  attachments       String[]
+  
+  problemId         String
+  problem           Problem   @relation(fields: [problemId], references: [id], onDelete: Cascade)
+  
+  senderId          String
+  sender            User      @relation(fields: [senderId], references: [id], onDelete: Cascade)
+  
+  createdAt         DateTime  @default(now()) @map("created_at")
+  updatedAt         DateTime  @updatedAt @map("updated_at")
+  
+  @@map("problem_messages")
+  @@index([problemId])
+  @@index([senderId])
+  @@index([createdAt])
+}

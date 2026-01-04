@@ -1,0 +1,145 @@
+model User {
+  id                 String     @id @default(uuid())
+  email              String     @unique
+  password           String
+  role               UserRole   @default(VENDOR)
+  status             UserStatus @default(ACTIVE)
+  isVerified         Boolean    @default(false)
+  needPasswordChange Boolean    @default(true)
+  profileImage       String?
+  phoneNumber        String?
+
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
+  lastLoginAt     DateTime? @map("last_login_at")
+  emailVerifiedAt DateTime? @map("email_verified_at")
+
+  vendorId   String? @unique
+  supplierId String? @unique
+
+  // RELATIONSHIPS
+  notificationPreferences NotificationPreferences?
+  subscription            Subscription?
+  otps                    OTP[]
+  notifications           Notification[]
+  activityLogs            ActivityLog[]
+  createdAssessments      Assessment[]             @relation("UserCreatedAssessments")
+  assessmentSubmissions   AssessmentSubmission[]   @relation("UserSubmissions")
+  createdReports          Report[]                 @relation("ReportCreator")
+  receivedReports         Report[]                 @relation("ReportRecipient")
+  payments                Payment[]
+  reportedProblems        Problem[]                @relation("ProblemReporter")
+  assignedProblems        Problem[]                @relation("ProblemAssignee")
+  problemMessages         ProblemMessage[]
+  uploadedDocuments       Document[]
+
+  // Profiles
+  vendorProfile   Vendor?   @relation("UserVendorProfile")
+  supplierProfile Supplier? @relation("UserSupplierProfile")
+
+  @@index([role])
+  @@index([status])
+  @@index([createdAt])
+  @@index([email])
+  @@map("users")
+}
+
+model Vendor {
+  id            String @id @default(uuid())
+  companyName   String @map("company_name")
+  businessEmail String @unique @map("business_email")
+  contactNumber String @map("contact_number")
+  industryType  String @map("industry_type")
+
+  firstName String? @map("first_name")
+  lastName  String? @map("last_name")
+
+  termsAccepted Boolean @default(false) @map("terms_accepted")
+  companyLogo   String? @map("company_logo")
+
+  isDeleted Boolean @default(false) @map("is_deleted")
+  isActive  Boolean @default(true) @map("is_active")
+
+  stripeCustomerId String? @unique @map("stripe_customer_id") // ADD THIS
+  stripeAccountId  String? @unique @map("stripe_account_id") // ADD THIS
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  userId String @unique
+  user   User   @relation("UserVendorProfile", fields: [userId], references: [id], onDelete: Cascade)
+
+  suppliers Supplier[]
+
+  @@index([userId])
+  @@index([businessEmail])
+  @@index([createdAt])
+  @@index([isActive])
+  @@map("vendors")
+}
+
+model Supplier {
+  id            String      @id @default(uuid())
+  name          String
+  contactPerson String      @map("contact_person")
+  email         String      @unique
+  phone         String
+  category      String
+  criticality   Criticality
+
+  contractStartDate DateTime  @map("contract_start_date")
+  contractEndDate   DateTime? @map("contract_end_date")
+  contractDocument  String?   @map("contract_document")
+  documentType      String?   @map("document_type")
+
+  isDeleted        Boolean          @default(false) @map("is_deleted")
+  isActive         Boolean          @default(false) @map("is_active")
+  invitationStatus InvitationStatus @default(PENDING) @map("invitation_status")
+
+  createdAt            DateTime  @default(now()) @map("created_at")
+  updatedAt            DateTime  @updatedAt @map("updated_at")
+  invitationSentAt     DateTime? @map("invitation_sent_at")
+  invitationAcceptedAt DateTime? @map("invitation_accepted_at")
+
+  userId String? @unique
+  user   User?   @relation("UserSupplierProfile", fields: [userId], references: [id])
+
+  vendorId String
+  vendor   Vendor @relation(fields: [vendorId], references: [id], onDelete: Cascade)
+
+  invitationToken String? @unique @map("invitation_token")
+  invitedBy       String? @map("invited_by")
+
+  overallScore       Decimal?     @map("overall_score") @db.Decimal(5, 2)
+  lastAssessmentDate DateTime?    @map("last_assessment_date")
+  nextAssessmentDue  DateTime?    @map("next_assessment_due")
+  complianceRate     Decimal?     @map("compliance_rate") @db.Decimal(5, 2)
+  riskLevel          Criticality? @map("risk_level")
+
+  nis2Compliant Boolean? @default(false) @map("nis2_compliant")
+
+  totalContractValue  Decimal? @map("total_contract_value") @db.Decimal(10, 2)
+  outstandingPayments Decimal? @map("outstanding_payments") @db.Decimal(10, 2)
+
+  onTimeDeliveryRate  Decimal? @map("on_time_delivery_rate") @db.Decimal(5, 2)
+  averageResponseTime Int?     @map("average_response_time")
+
+  bivScore          Decimal? @map("biv_score") @db.Decimal(5, 2)
+  businessScore     Decimal? @map("business_score") @db.Decimal(5, 2)
+  integrityScore    Decimal? @map("integrity_score") @db.Decimal(5, 2)
+  availabilityScore Decimal? @map("availability_score") @db.Decimal(5, 2)
+
+  initialAssessmentCompleted Boolean @default(false) @map("initial_assessment_completed")
+  fullAssessmentCompleted    Boolean @default(false) @map("full_assessment_completed")
+
+  assessmentSubmissions AssessmentSubmission[]
+
+  @@index([vendorId, isActive])
+  @@index([email])
+  @@index([criticality])
+  @@index([invitationStatus])
+  @@index([contractEndDate])
+  @@index([riskLevel])
+  @@index([bivScore])
+  @@map("suppliers")
+}

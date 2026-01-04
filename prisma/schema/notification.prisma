@@ -1,0 +1,49 @@
+model Notification {
+  id     String @id @default(uuid())
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  title    String
+  message  String
+  type     NotificationType
+  metadata Json?
+
+  isRead    Boolean              @default(false) @map("is_read")
+  isDeleted Boolean              @default(false) @map("is_deleted")
+  priority  NotificationPriority @default(MEDIUM)
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([userId, isRead])
+  @@index([userId, createdAt])
+  @@index([type, createdAt])
+  @@index([isRead, createdAt])
+  @@map("notifications")
+}
+
+model NotificationPreferences {
+  id     String @id @default(uuid())
+  userId String @unique
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  emailNotifications  Boolean @default(true) @map("email_notifications")
+  pushNotifications   Boolean @default(true) @map("push_notifications")
+  riskAlerts          Boolean @default(true) @map("risk_alerts")
+  contractReminders   Boolean @default(true) @map("contract_reminders")
+  complianceUpdates   Boolean @default(true) @map("compliance_updates")
+  assessmentReminders Boolean @default(true) @map("assessment_reminders")
+  problemAlerts       Boolean @default(true) @map("problem_alerts")
+  reportAlerts        Boolean @default(true) @map("report_alerts")
+  paymentAlerts       Boolean @default(true) @map("payment_alerts")
+  messageAlerts       Boolean @default(true) @map("message_alerts")
+
+  digestFrequency String @default("DAILY")
+  quietHoursStart Int?   @default(22) @map("quiet_hours_start")
+  quietHoursEnd   Int?   @default(8) @map("quiet_hours_end")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("notification_preferences")
+}

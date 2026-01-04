@@ -1,0 +1,121 @@
+model Plan {
+  id              String       @id @default(uuid())
+  name            String
+  description     String?
+  type            PlanType     @default(STARTER)
+  billingCycle    BillingCycle @default(MONTHLY) @map("billing_cycle")
+  price           Decimal      @db.Decimal(10, 2)
+
+  currency        String       @default("EUR")
+  supplierLimit   Int?         @default(10) @map("supplier_limit")
+  assessmentLimit Int?         @default(100) @map("assessment_limit")
+  storageLimit    Int?         @default(10) @map("storage_limit")
+  userLimit       Int?         @default(5) @map("user_limit")
+  features        Json
+  trialDays       Int          @default(14) @map("trial_days")
+
+  originalPrice Decimal? @map("original_price") @db.Decimal(10, 2)
+  isPopular     Boolean  @default(false) @map("is_popular")
+
+  isActive  Boolean @default(true) @map("is_active")
+  isDefault Boolean @default(false) @map("is_default")
+  isDeleted Boolean @default(false) @map("is_deleted")
+
+  stripePriceId   String? @unique @map("stripe_price_id")
+  stripeProductId String? @unique @map("stripe_product_id")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  subscriptions   Subscription[]
+  payments        Payment[]
+  // ADD THESE TWO LINES TO FIX THE ERROR
+  previousChanges PlanChangeHistory[] @relation("PreviousPlan")
+  newChanges      PlanChangeHistory[] @relation("NewPlan")
+
+  @@index([type, billingCycle])
+  @@index([isActive])
+  @@map("plans")
+}
+
+model Subscription {
+  id     String @id @default(uuid())
+  userId String @unique
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  planId String
+  plan   Plan   @relation(fields: [planId], references: [id])
+
+  status            SubscriptionStatus @default(TRIALING)
+  billingCycle      BillingCycle       @default(MONTHLY) @map("billing_cycle")
+  cancelAtPeriodEnd Boolean            @default(false) @map("cancel_at_period_end")
+
+  currentPeriodStart DateTime? @map("current_period_start")
+  currentPeriodEnd   DateTime? @map("current_period_end")
+  trialStart         DateTime? @map("trial_start")
+  trialEnd           DateTime? @map("trial_end")
+
+  stripeCustomerId     String? @unique @map("stripe_customer_id")
+  stripeSubscriptionId String? @unique @map("stripe_subscription_id")
+  stripeSessionId      String? @unique @map("stripe_session_id")
+
+  cancellationReason String?   @map("cancellation_reason")
+  cancelledAt        DateTime? @map("cancelled_at")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  payments            Payment[]
+  PlanLimitData           PlanLimitData?
+  planChangeHistories PlanChangeHistory[]
+
+  @@index([userId])
+  @@index([status])
+  @@index([currentPeriodEnd])
+  @@index([trialEnd])
+  @@map("subscriptions")
+}
+
+model Payment {
+  id          String        @id @default(uuid())
+  amount      Decimal       @db.Decimal(10, 2)
+  currency    String        @default("EUR")
+  status      PaymentStatus @default(PENDING)
+  paymentType PaymentType   @default(SUBSCRIPTION) @map("payment_type")
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  planId String?
+  plan   Plan?   @relation(fields: [planId], references: [id])
+
+  subscriptionId String?
+  subscription   Subscription? @relation(fields: [subscriptionId], references: [id])
+
+  stripePaymentId  String? @unique @map("stripe_payment_id")
+  stripeSessionId  String? @unique @map("stripe_session_id")
+  stripeInvoiceId  String? @map("stripe_invoice_id")
+  stripeCustomerId String? @map("stripe_customer_id")
+
+  paymentMethod   String? @map("payment_method")
+  paymentMethodId String? @map("payment_method_id")
+  billingEmail    String? @map("billing_email")
+  billingDetails  Json?   @map("billing_details")
+
+  receiptUrl String? @map("receipt_url")
+
+  paidAt     DateTime? @map("paid_at")
+  refundedAt DateTime? @map("refunded_at")
+  createdAt  DateTime  @default(now()) @map("created_at")
+  updatedAt  DateTime  @updatedAt @map("updated_at")
+
+  metadata Json?
+
+  @@index([userId])
+  @@index([subscriptionId])
+  @@index([status])
+  @@index([paidAt])
+  @@index([createdAt])
+  @@index([stripePaymentId])
+  @@map("payments")
+}

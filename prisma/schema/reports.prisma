@@ -1,0 +1,36 @@
+
+model Report {
+  id            String     @id @default(uuid())
+  title         String
+  reportType    ReportType @map("report_type")
+  description   String?
+  documentUrl   String     @map("document_url")
+  documentType  String     @map("document_type")
+  fileSize      Float      @map("file_size")
+  parameters    Json?
+  filters       Json?
+  
+  createdById   String
+  creator       User       @relation("ReportCreator", fields: [createdById], references: [id], onDelete: Cascade)
+  
+  generatedForId String?
+  generatedFor  User?      @relation("ReportRecipient", fields: [generatedForId], references: [id], onDelete: SetNull)
+  
+  vendorId      String     @map("vendor_id")
+  supplierId    String?    @map("supplier_id")
+  
+  status        ReportStatus @default(GENERATED)
+  isDeleted     Boolean    @default(false) @map("is_deleted")
+  
+  createdAt     DateTime   @default(now()) @map("created_at")
+  updatedAt     DateTime   @updatedAt @map("updated_at")
+  viewedAt      DateTime?  @map("viewed_at")
+  sentAt        DateTime?  @map("sent_at")
+  
+  @@map("reports")
+  @@index([createdById])
+  @@index([vendorId, supplierId])
+  @@index([reportType])
+  @@index([createdAt])
+  @@index([status])
+}
