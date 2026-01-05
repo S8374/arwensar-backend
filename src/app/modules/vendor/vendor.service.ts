@@ -177,7 +177,6 @@ export interface VendorDashboardStats {
 }
 
 export const VendorService = {
-  // ========== DASHBOARD ==========
   // ========== GET VENDOR DASHBOARD STATS ==========
   async getVendorDashboardStats(vendorId: string): Promise<VendorDashboardStats> {
     // Verify vendor exists

@@ -7,6 +7,7 @@ import { mailtrapService } from "../../shared/mailtrap.service";
 import { generatePDF } from "../../../utils/pdfGenerator";
 import fs from "fs";
 import path from "path";
+import { NotificationService } from "../notification/notification.service";
 
 export interface ReportFilters {
   vendorId?: string;
@@ -1963,7 +1964,7 @@ export const ReportService = {
 
     // Create notification for recipient
     if (recipientUserId) {
-      await prisma.notification.create({
+      await NotificationService.createNotification({
         data: {
           userId: recipientUserId,
           title: "New Report Received",
@@ -2159,7 +2160,7 @@ export const ReportService = {
     });
 
     // Create notification
-    await prisma.notification.create({
+    await NotificationService.createNotification({
       data: {
         userId,
         title: "External Report Uploaded",

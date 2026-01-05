@@ -28,10 +28,8 @@ model NotificationPreferences {
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   emailNotifications  Boolean @default(true) @map("email_notifications")
-  pushNotifications   Boolean @default(true) @map("push_notifications")
   riskAlerts          Boolean @default(true) @map("risk_alerts")
   contractReminders   Boolean @default(true) @map("contract_reminders")
-  complianceUpdates   Boolean @default(true) @map("compliance_updates")
   assessmentReminders Boolean @default(true) @map("assessment_reminders")
   problemAlerts       Boolean @default(true) @map("problem_alerts")
   reportAlerts        Boolean @default(true) @map("report_alerts")

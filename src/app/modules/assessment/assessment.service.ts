@@ -381,7 +381,6 @@ export const AssessmentService = {
   },
 
   // ========== CALCULATE BIV SCORES ==========
-  // Replace your current calculateBIVScores with this
   calculateBIVScores(answers: any[]): any {
     if (!answers || answers.length === 0) {
       return {
@@ -1131,44 +1130,6 @@ async submitAssessment(
             reviewedBy: reviewer.role
           }
         });
-
-        // Send email to supplier
-        try {
-          await mailtrapService.sendHtmlEmail({
-            to: submission.user.email,
-            subject: `Assessment ${data.status}: ${submission.assessment.title}`,
-            html: `
-              <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-                <h2 style="color: #333;">Assessment ${data.status}</h2>
-                <p>Your assessment "${submission.assessment.title}" has been ${data.status.toLowerCase()}.</p>
-                
-                ${data.reviewComments ? `
-                  <div style="background-color: #f8f9fa; padding: 20px; border-radius: 5px; margin: 20px 0;">
-                    <h3 style="margin-top: 0;">Review Comments:</h3>
-                    <p>${data.reviewComments}</p>
-                  </div>
-                ` : ''}
-
-                ${data.status !== 'APPROVED' ? `
-                  <div style="background-color: #fff3cd; padding: 15px; border-radius: 5px; margin: 20px 0; border-left: 4px solid #ffc107;">
-                    <p style="margin:0; color: #856404;"><strong>Note:</strong> Due to this rejection, your supplier risk scores have been reduced accordingly.</p>
-                  </div>
-                ` : ''}
-                
-                <div style="text-align: center; margin: 30px 0;">
-                  <a href="${process.env.FRONTEND_URL}/assessments/submissions/${submission.assessmentId}" style="background-color: #007bff; color: white; padding: 12px 30px; text-decoration: none; border-radius: 5px; font-weight: bold;">
-                    View Assessment
-                  </a>
-                </div>
-                
-                <hr style="border: none; border-top: 1px solid #eee; margin: 20px 0;">
-                <p style="color: #666; font-size: 12px;">© ${new Date().getFullYear()} CyberNark. All rights reserved.</p>
-              </div>
-            `
-          });
-        } catch (error) {
-          console.error("Failed to send assessment review email:", error);
-        }
       }
 
       return updatedSubmission;

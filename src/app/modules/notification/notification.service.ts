@@ -18,360 +18,496 @@ export interface NotificationStats {
 
 export const NotificationService = {
   // ========== GET NOTIFICATIONS (ROLE-BASED) ==========
-  async getNotifications(
-    userId: string,
-    options: any = {}
-  ): Promise<{ notifications: any[]; meta: any }> {
-    const {
-      page = 1,
-      limit = 20,
-      isRead,
-      type,
-      priority,
-      sortBy = 'createdAt',
-      sortOrder = 'desc'
-    } = options;
+  // async getNotifications(
+  //   userId: string,
+  //   options: any = {}
+  // ): Promise<{ notifications: any[]; meta: any }> {
+  //   const {
+  //     page = 1,
+  //     limit = 20,
+  //     isRead,
+  //     type,
+  //     priority,
+  //     sortBy = 'createdAt',
+  //     sortOrder = 'desc'
+  //   } = options;
 
-    const skip = (page - 1) * limit;
+  //   const skip = (page - 1) * limit;
 
-    // First, get user details to determine role and associated entities
-    const user = await prisma.user.findUnique({
-      where: { id: userId },
-      select: {
-        id: true,
-        role: true,
-        vendorId: true,
-        supplierId: true,
-        email: true
-      }
-    });
+  //   // First, get user details to determine role and associated entities
+  //   const user = await prisma.user.findUnique({
+  //     where: { id: userId },
+  //     select: {
+  //       id: true,
+  //       role: true,
+  //       vendorId: true,
+  //       supplierId: true,
+  //       email: true
+  //     }
+  //   });
 
-    if (!user) {
-      throw new ApiError(httpStatus.NOT_FOUND, "User not found");
-    }
+  //   if (!user) {
+  //     throw new ApiError(httpStatus.NOT_FOUND, "User not found");
+  //   }
 
-    // Build base where clause
-    const where: any = {
-      isDeleted: false
-    };
+  //   // Build base where clause
+  //   const where: any = {
+  //     isDeleted: false
+  //   };
 
-    // Role-based notification filtering
-    switch (user.role) {
-      case 'ADMIN':
-        // Admin sees all notifications (no additional filtering)
-        break;
+  //   // Role-based notification filtering
+  //   switch (user.role) {
+  //     case 'ADMIN':
+  //       // Admin sees all notifications (no additional filtering)
+  //       break;
 
-      case 'VENDOR':
-        // Vendor sees notifications:
-        // 1. Sent directly to them (userId = userId)
-        // 2. Related to their suppliers
-        // 3. Related to their vendor profile
+  //     case 'VENDOR':
+  //       // Vendor sees notifications:
+  //       // 1. Sent directly to them (userId = userId)
+  //       // 2. Related to their suppliers
+  //       // 3. Related to their vendor profile
 
-        if (user.vendorId) {
-          // Get vendor's suppliers
-          const vendorSuppliers = await prisma.supplier.findMany({
-            where: { vendorId: user.vendorId },
-            select: { id: true, userId: true }
-          });
+  //       if (user.vendorId) {
+  //         // Get vendor's suppliers
+  //         const vendorSuppliers = await prisma.supplier.findMany({
+  //           where: { vendorId: user.vendorId },
+  //           select: { id: true, userId: true }
+  //         });
 
-          const supplierUserIds = vendorSuppliers
-            .map(s => s.userId)
-            .filter(Boolean) as string[];
+  //         const supplierUserIds = vendorSuppliers
+  //           .map(s => s.userId)
+  //           .filter(Boolean) as string[];
 
-          where.OR = [
-            // Notifications sent directly to vendor
-            { userId: user.id },
+  //         where.OR = [
+  //           // Notifications sent directly to vendor
+  //           { userId: user.id },
 
-            // Notifications sent to vendor's suppliers
-            ...(supplierUserIds.length > 0 ? [{ userId: { in: supplierUserIds } }] : []),
+  //           // Notifications sent to vendor's suppliers
+  //           ...(supplierUserIds.length > 0 ? [{ userId: { in: supplierUserIds } }] : []),
 
-            // Vendor-specific notifications (via metadata)
-            {
-              metadata: {
-                path: ['vendorId'],
-                equals: user.vendorId
-              }
-            },
-            {
-              metadata: {
-                path: ['receiverVendorId'],
-                equals: user.vendorId
-              }
-            }
-          ];
-        } else {
-          // Vendor without profile - only their own notifications
-          where.userId = user.id;
-        }
-        break;
+  //           // Vendor-specific notifications (via metadata)
+  //           {
+  //             metadata: {
+  //               path: ['vendorId'],
+  //               equals: user.vendorId
+  //             }
+  //           },
+  //           {
+  //             metadata: {
+  //               path: ['receiverVendorId'],
+  //               equals: user.vendorId
+  //             }
+  //           }
+  //         ];
+  //       } else {
+  //         // Vendor without profile - only their own notifications
+  //         where.userId = user.id;
+  //       }
+  //       break;
 
-      case 'SUPPLIER':
-        // Supplier sees:
-        // 1. Notifications sent directly to them
-        // 2. Notifications related to their supplier profile
-        // 3. Notifications from their vendor
+  //     case 'SUPPLIER':
+  //       // Supplier sees:
+  //       // 1. Notifications sent directly to them
+  //       // 2. Notifications related to their supplier profile
+  //       // 3. Notifications from their vendor
 
-        if (user.supplierId) {
-          // Get supplier's vendor
-          const supplier = await prisma.supplier.findUnique({
-            where: { id: user.supplierId },
-            select: { vendorId: true }
-          });
+  //       if (user.supplierId) {
+  //         // Get supplier's vendor
+  //         const supplier = await prisma.supplier.findUnique({
+  //           where: { id: user.supplierId },
+  //           select: { vendorId: true }
+  //         });
 
-          if (supplier) {
-            // Get vendor's user ID
-            const vendor = await prisma.vendor.findUnique({
-              where: { id: supplier.vendorId },
-              select: { userId: true }
-            });
+  //         if (supplier) {
+  //           // Get vendor's user ID
+  //           const vendor = await prisma.vendor.findUnique({
+  //             where: { id: supplier.vendorId },
+  //             select: { userId: true }
+  //           });
 
-            where.OR = [
-              // Notifications sent directly to supplier
-              { userId: user.id },
+  //           where.OR = [
+  //             // Notifications sent directly to supplier
+  //             { userId: user.id },
 
-              // Vendor's notifications that might be relevant to supplier
-              ...(vendor ? [{ userId: vendor.userId }] : []),
+  //             // Vendor's notifications that might be relevant to supplier
+  //             ...(vendor ? [{ userId: vendor.userId }] : []),
 
-              // Supplier-specific notifications (via metadata)
-              {
-                metadata: {
-                  path: ['supplierId'],
-                  equals: user.supplierId
+  //             // Supplier-specific notifications (via metadata)
+  //             {
+  //               metadata: {
+  //                 path: ['supplierId'],
+  //                 equals: user.supplierId
+  //               }
+  //             },
+  //             {
+  //               metadata: {
+  //                 path: ['receiverSupplierId'],
+  //                 equals: user.supplierId
+  //               }
+  //             }
+  //           ];
+  //         } 
+  //       } else {
+  //         where.userId = user.id;
+  //       }
+  //       break;
+
+  //     default:
+  //       where.userId = user.id;
+  //   }
+
+  //   // Apply additional filters
+  //   if (isRead !== undefined) {
+  //     where.isRead = isRead === 'true';
+  //   }
+
+  //   if (type) {
+  //     where.type = type;
+  //   }
+
+  //   if (priority) {
+  //     where.priority = priority;
+  //   }
+
+  //   // Ensure we have at least one condition
+  //   if (!where.userId && !where.OR) {
+  //     where.userId = user.id;
+  //   }
+
+  //   try {
+  //     const [notifications, total] = await Promise.all([
+  //       prisma.notification.findMany({
+  //         where,
+  //         orderBy: { [sortBy]: sortOrder },
+  //         skip,
+  //         take: limit,
+  //         include: {
+  //           user: {
+  //             select: {
+  //               id: true,
+  //               email: true,
+  //               role: true,
+  //               vendorProfile: {
+  //                 select: {
+  //                   id: true,
+  //                   companyName: true
+  //                 }
+  //               },
+  //               supplierProfile: {
+  //                 select: {
+  //                   id: true,
+  //                   name: true
+  //                 }
+  //               }
+  //             }
+  //           }
+  //         }
+  //       }),
+  //       prisma.notification.count({ where })
+  //     ]);
+
+  //     // Transform and filter notifications
+  //     const transformedNotifications = await Promise.all(
+  //       notifications.map(async (notification) => {
+  //         const notificationMetadata = notification.metadata as any;
+
+  //         // Check if user should see this notification
+  //         let shouldShow = false;
+
+  //         // Always show notifications sent directly to user
+  //         if (notification.userId === user.id) {
+  //           shouldShow = true;
+  //         } else {
+  //           // Check role-based visibility
+  //           switch (user.role) {
+  //             case 'ADMIN':
+  //               shouldShow = true;
+  //               break;
+
+  //             case 'VENDOR':
+  //               if (user.vendorId) {
+  //                 // Check if notification is related to vendor's suppliers
+  //                 if (notificationMetadata?.supplierId) {
+  //                   const supplier = await prisma.supplier.findFirst({
+  //                     where: {
+  //                       id: notificationMetadata.supplierId,
+  //                       vendorId: user.vendorId
+  //                     }
+  //                   });
+  //                   shouldShow = !!supplier;
+  //                 }
+
+  //                 // Check if notification is vendor-specific
+  //                 if (notificationMetadata?.vendorId === user.vendorId) {
+  //                   shouldShow = true;
+  //                 }
+
+  //                 // Check if notification is from vendor's suppliers
+  //                 if (notification.user?.supplierProfile?.id) {
+  //                   const supplier = await prisma.supplier.findFirst({
+  //                     where: {
+  //                       id: notification.user.supplierProfile.id,
+  //                       vendorId: user.vendorId
+  //                     }
+  //                   });
+  //                   shouldShow = !!supplier;
+  //                 }
+  //               }
+  //               break;
+
+  //             case 'SUPPLIER':
+  //               if (user.supplierId) {
+  //                 // Check if notification is supplier-specific
+  //                 if (notificationMetadata?.supplierId === user.supplierId) {
+  //                   shouldShow = true;
+  //                 }
+
+  //                 // Check if notification is from vendor to this supplier
+  //                 if (notificationMetadata?.receiverSupplierId === user.supplierId) {
+  //                   shouldShow = true;
+  //                 }
+
+  //                 // Check if notification is from supplier's vendor
+  //                 if (notification.user?.vendorProfile?.id) {
+  //                   const supplier = await prisma.supplier.findUnique({
+  //                     where: { id: user.supplierId },
+  //                     select: { vendorId: true }
+  //                   });
+
+  //                   if (supplier && notification.user.vendorProfile.id === supplier.vendorId) {
+  //                     shouldShow = true;
+  //                   }
+  //                 }
+  //               }
+  //               break;
+  //           }
+  //         }
+
+  //         if (!shouldShow) {
+  //           return null;
+  //         }
+
+  //         // Build transformed notification object
+  //         const transformed: any = {
+  //           id: notification.id,
+  //           userId: notification.userId,
+  //           title: notification.title,
+  //           message: notification.message,
+  //           type: notification.type,
+  //           metadata: notification.metadata,
+  //           isRead: notification.isRead,
+  //           isDeleted: notification.isDeleted,
+  //           priority: notification.priority,
+  //           createdAt: notification.createdAt,
+  //           updatedAt: notification.updatedAt,
+  //           sender: {
+  //             id: notification.user?.id,
+  //             email: notification.user?.email,
+  //             role: notification.user?.role,
+  //             name: notification.user?.role === 'VENDOR'
+  //               ? notification.user?.vendorProfile?.companyName
+  //               : notification.user?.role === 'SUPPLIER'
+  //                 ? notification.user?.supplierProfile?.name
+  //                 : 'Admin'
+  //           }
+  //         };
+
+  //         // Add recipient info for vendor notifications to suppliers
+  //         if (user.role === 'VENDOR' && notificationMetadata?.supplierId) {
+  //           const supplier = await prisma.supplier.findUnique({
+  //             where: { id: notificationMetadata.supplierId },
+  //             select: { name: true, email: true }
+  //           });
+
+  //           if (supplier) {
+  //             transformed.recipient = {
+  //               type: 'SUPPLIER',
+  //               name: supplier.name,
+  //               email: supplier.email
+  //             };
+  //           }
+  //         }
+
+  //         // Add recipient info for supplier notifications to vendor
+  //         if (user.role === 'SUPPLIER' && notificationMetadata?.vendorId) {
+  //           const vendor = await prisma.vendor.findUnique({
+  //             where: { id: notificationMetadata.vendorId },
+  //             select: { companyName: true, businessEmail: true }
+  //           });
+
+  //           if (vendor) {
+  //             transformed.recipient = {
+  //               type: 'VENDOR',
+  //               name: vendor.companyName,
+  //               email: vendor.businessEmail
+  //             };
+  //           }
+  //         }
+
+  //         return transformed;
+  //       })
+  //     );
+
+  //     // Filter out null notifications
+  //     const validNotifications = transformedNotifications.filter(n => n !== null);
+
+  //     return {
+  //       notifications: validNotifications,
+  //       meta: {
+  //         page,
+  //         limit,
+  //         total: validNotifications.length,
+  //         pages: Math.ceil(validNotifications.length / limit)
+  //       }
+  //     };
+  //   } catch (error) {
+  //     console.error('Error fetching notifications:', error);
+  //     throw new ApiError(
+  //       httpStatus.INTERNAL_SERVER_ERROR,
+  //       'Failed to fetch notifications'
+  //     );
+  //   }
+  // },
+async getNotifications(
+  userId: string,
+  options: any = {}
+): Promise<{ notifications: any[]; meta: any }> {
+  const {
+    page = 1,
+    limit = 20,
+    isRead,
+    type,
+    priority,
+    sortBy = 'createdAt',
+    sortOrder = 'desc'
+  } = options;
+
+  const skip = (page - 1) * limit;
+
+  // Verify user exists
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { id: true }
+  });
+
+  if (!user) {
+    throw new ApiError(httpStatus.NOT_FOUND, "User not found");
+  }
+
+  // SIMPLE: Only get notifications where userId matches
+  const where: any = {
+    userId: userId, // CRITICAL: Only this user's notifications
+    isDeleted: false
+  };
+
+  // Apply additional filters
+  if (isRead !== undefined) {
+    where.isRead = isRead === 'true';
+  }
+
+  if (type) {
+    where.type = type;
+  }
+
+  if (priority) {
+    where.priority = priority;
+  }
+
+  try {
+    const [notifications, total] = await Promise.all([
+      prisma.notification.findMany({
+        where,
+        orderBy: { [sortBy]: sortOrder },
+        skip,
+        take: limit,
+        include: {
+          user: {
+            select: {
+              id: true,
+              email: true,
+              role: true,
+              vendorProfile: {
+                select: {
+                  id: true,
+                  companyName: true
                 }
               },
-              {
-                metadata: {
-                  path: ['receiverSupplierId'],
-                  equals: user.supplierId
+              supplierProfile: {
+                select: {
+                  id: true,
+                  name: true
                 }
               }
-            ];
-          } else {
-            // Supplier without vendor relationship - only their own notifications
-            where.userId = user.id;
+            }
           }
-        } else {
-          where.userId = user.id;
         }
-        break;
+      }),
+      prisma.notification.count({ where })
+    ]);
 
-      default:
-        where.userId = user.id;
-    }
-
-    // Apply additional filters
-    if (isRead !== undefined) {
-      where.isRead = isRead === 'true';
-    }
-
-    if (type) {
-      where.type = type;
-    }
-
-    if (priority) {
-      where.priority = priority;
-    }
-
-    // Ensure we have at least one condition
-    if (!where.userId && !where.OR) {
-      where.userId = user.id;
-    }
-
-    try {
-      const [notifications, total] = await Promise.all([
-        prisma.notification.findMany({
-          where,
-          orderBy: { [sortBy]: sortOrder },
-          skip,
-          take: limit,
-          include: {
-            user: {
-              select: {
-                id: true,
-                email: true,
-                role: true,
-                vendorProfile: {
-                  select: {
-                    id: true,
-                    companyName: true
-                  }
-                },
-                supplierProfile: {
-                  select: {
-                    id: true,
-                    name: true
-                  }
-                }
-              }
-            }
-          }
-        }),
-        prisma.notification.count({ where })
-      ]);
-
-      // Transform and filter notifications
-      const transformedNotifications = await Promise.all(
-        notifications.map(async (notification) => {
-          const notificationMetadata = notification.metadata as any;
-
-          // Check if user should see this notification
-          let shouldShow = false;
-
-          // Always show notifications sent directly to user
-          if (notification.userId === user.id) {
-            shouldShow = true;
-          } else {
-            // Check role-based visibility
-            switch (user.role) {
-              case 'ADMIN':
-                shouldShow = true;
-                break;
-
-              case 'VENDOR':
-                if (user.vendorId) {
-                  // Check if notification is related to vendor's suppliers
-                  if (notificationMetadata?.supplierId) {
-                    const supplier = await prisma.supplier.findFirst({
-                      where: {
-                        id: notificationMetadata.supplierId,
-                        vendorId: user.vendorId
-                      }
-                    });
-                    shouldShow = !!supplier;
-                  }
-
-                  // Check if notification is vendor-specific
-                  if (notificationMetadata?.vendorId === user.vendorId) {
-                    shouldShow = true;
-                  }
-
-                  // Check if notification is from vendor's suppliers
-                  if (notification.user?.supplierProfile?.id) {
-                    const supplier = await prisma.supplier.findFirst({
-                      where: {
-                        id: notification.user.supplierProfile.id,
-                        vendorId: user.vendorId
-                      }
-                    });
-                    shouldShow = !!supplier;
-                  }
-                }
-                break;
-
-              case 'SUPPLIER':
-                if (user.supplierId) {
-                  // Check if notification is supplier-specific
-                  if (notificationMetadata?.supplierId === user.supplierId) {
-                    shouldShow = true;
-                  }
-
-                  // Check if notification is from vendor to this supplier
-                  if (notificationMetadata?.receiverSupplierId === user.supplierId) {
-                    shouldShow = true;
-                  }
-
-                  // Check if notification is from supplier's vendor
-                  if (notification.user?.vendorProfile?.id) {
-                    const supplier = await prisma.supplier.findUnique({
-                      where: { id: user.supplierId },
-                      select: { vendorId: true }
-                    });
-
-                    if (supplier && notification.user.vendorProfile.id === supplier.vendorId) {
-                      shouldShow = true;
-                    }
-                  }
-                }
-                break;
-            }
-          }
-
-          if (!shouldShow) {
-            return null;
-          }
-
-          // Build transformed notification object
-          const transformed: any = {
-            id: notification.id,
-            userId: notification.userId,
-            title: notification.title,
-            message: notification.message,
-            type: notification.type,
-            metadata: notification.metadata,
-            isRead: notification.isRead,
-            isDeleted: notification.isDeleted,
-            priority: notification.priority,
-            createdAt: notification.createdAt,
-            updatedAt: notification.updatedAt,
-            sender: {
-              id: notification.user?.id,
-              email: notification.user?.email,
-              role: notification.user?.role,
-              name: notification.user?.role === 'VENDOR'
-                ? notification.user?.vendorProfile?.companyName
-                : notification.user?.role === 'SUPPLIER'
-                  ? notification.user?.supplierProfile?.name
-                  : 'Admin'
-            }
-          };
-
-          // Add recipient info for vendor notifications to suppliers
-          if (user.role === 'VENDOR' && notificationMetadata?.supplierId) {
-            const supplier = await prisma.supplier.findUnique({
-              where: { id: notificationMetadata.supplierId },
-              select: { name: true, email: true }
-            });
-
-            if (supplier) {
-              transformed.recipient = {
-                type: 'SUPPLIER',
-                name: supplier.name,
-                email: supplier.email
-              };
-            }
-          }
-
-          // Add recipient info for supplier notifications to vendor
-          if (user.role === 'SUPPLIER' && notificationMetadata?.vendorId) {
-            const vendor = await prisma.vendor.findUnique({
-              where: { id: notificationMetadata.vendorId },
-              select: { companyName: true, businessEmail: true }
-            });
-
-            if (vendor) {
-              transformed.recipient = {
-                type: 'VENDOR',
-                name: vendor.companyName,
-                email: vendor.businessEmail
-              };
-            }
-          }
-
-          return transformed;
-        })
-      );
-
-      // Filter out null notifications
-      const validNotifications = transformedNotifications.filter(n => n !== null);
-
-      return {
-        notifications: validNotifications,
-        meta: {
-          page,
-          limit,
-          total: validNotifications.length,
-          pages: Math.ceil(validNotifications.length / limit)
+    // Transform notifications
+    const transformedNotifications = notifications.map((notification) => {
+      const notificationMetadata = notification.metadata as any;
+      
+      const transformed: any = {
+        id: notification.id,
+        userId: notification.userId,
+        title: notification.title,
+        message: notification.message,
+        type: notification.type,
+        metadata: notification.metadata,
+        isRead: notification.isRead,
+        isDeleted: notification.isDeleted,
+        priority: notification.priority,
+        createdAt: notification.createdAt,
+        updatedAt: notification.updatedAt,
+        sender: {
+          id: notification.user?.id,
+          email: notification.user?.email,
+          role: notification.user?.role,
+          name: notification.user?.role === 'VENDOR'
+            ? notification.user?.vendorProfile?.companyName
+            : notification.user?.role === 'SUPPLIER'
+              ? notification.user?.supplierProfile?.name
+              : notification.user?.email || 'System'
         }
       };
-    } catch (error) {
-      console.error('Error fetching notifications:', error);
-      throw new ApiError(
-        httpStatus.INTERNAL_SERVER_ERROR,
-        'Failed to fetch notifications'
-      );
-    }
-  },
 
+      // Optional: Add context info based on metadata
+      if (notificationMetadata?.supplierId) {
+        transformed.supplierContext = {
+          id: notificationMetadata.supplierId,
+          name: notificationMetadata.supplierName
+        };
+      }
+
+      if (notificationMetadata?.vendorId) {
+        transformed.vendorContext = {
+          id: notificationMetadata.vendorId,
+          name: notificationMetadata.vendorName || notificationMetadata.vendorCompanyName
+        };
+      }
+
+      return transformed;
+    });
+
+    return {
+      notifications: transformedNotifications,
+      meta: {
+        page,
+        limit,
+        total,
+        pages: Math.ceil(total / limit)
+      }
+    };
+  } catch (error) {
+    console.error('Error fetching notifications:', error);
+    throw new ApiError(
+      httpStatus.INTERNAL_SERVER_ERROR,
+      'Failed to fetch notifications'
+    );
+  }
+},
   // ========== GET NOTIFICATION STATS (Updated for role-based) ==========
   async getNotificationStats(userId: string): Promise<NotificationStats> {
     // Get user details
@@ -598,99 +734,171 @@ export const NotificationService = {
   },
 
 
-  async createNotification(data: any): Promise<Notification> {
+// async createNotification(data: any): Promise<Notification | null> {
+//   const targetUser = await prisma.user.findUnique({
+//     where: { id: data.userId },
+//     select: { id: true, email: true, role: true }
+//   });
+
+//   if (!targetUser) {
+//     throw new ApiError(httpStatus.NOT_FOUND, "Target user not found");
+//   }
+
+//   let preferences = await prisma.notificationPreferences.findUnique({
+//     where: { userId: data.userId }
+//   });
+
+//   // Create default preferences if not exist
+//   if (!preferences) {
+//     preferences = await prisma.notificationPreferences.create({
+//       data: { userId: data.userId }
+//     });
+//   }
+
+//   // Check notification type preference
+//   const allowNotification = this.shouldSendNotificationForType(
+//     data.type,
+//     preferences
+//   );
+
+//   if (!allowNotification) {
+//     console.log(`Notification type ${data.type} disabled for user ${data.userId}`);
+//     return null;
+//   }
+
+//   // Create notification (DB)
+//   const notification = await prisma.notification.create({
+//     data: {
+//       userId: data.userId,
+//       title: data.title,
+//       message: data.message,
+//       type: data.type,
+//       metadata: data.metadata || {},
+//       priority: data.priority || "MEDIUM"
+//     },
+//     include: {
+//       user: {
+//         select: {
+//           id: true,
+//           email: true,
+//           role: true
+//         }
+//       }
+//     }
+//   });
+
+//   // Email disabled globally
+//   if (!preferences.emailNotifications) {
+//     return notification;
+//   }
+
+//   // Quiet hours check
+//   if (this.isInQuietHours(preferences)) {
+//     console.log(`Quiet hours active for user ${data.userId}`);
+//     return notification;
+//   }
+
+//   // Send email
+//   try {
+//     await mailtrapService.sendHtmlEmail({
+//       to: targetUser.email,
+//       subject: data.title,
+//       html: this.generateEmailTemplate(data, targetUser)
+//     });
+//   } catch (error) {
+//     console.error("Failed to send notification email:", error);
+//   }
+
+//   return notification;
+// }
+
+  async createNotification(data: any): Promise<Notification | null> {
     const targetUser = await prisma.user.findUnique({
       where: { id: data.userId },
-      select: { id: true, email: true, role: true }
+      select: { id: true, email: true }
     });
 
-    if (!targetUser) {
-      throw new ApiError(httpStatus.NOT_FOUND, "Target user not found");
+    if (!targetUser || !targetUser.email) {
+      throw new ApiError(httpStatus.NOT_FOUND, "Target user not found or email missing");
     }
-    // Get user's notification preferences
-    const preferences = await prisma.notificationPreferences.findUnique({
+
+    // ===============================
+    // GET / CREATE PREFERENCES
+    // ===============================
+    let preferences = await prisma.notificationPreferences.findUnique({
       where: { userId: data.userId }
     });
-    console.log("user preference", preferences)
-    const hisNoti = this.shouldSendNotificationForType(data.type, preferences) ;
 
-
-    console.log("His Noti",hisNoti);
-    // Create the notification in database first
-    const notification = await prisma.notification.create({
-      data: {
-        userId: data.userId,
-        title: data.title,
-        message: data.message,
-        type: data.type,
-        metadata: data.metadata || {},
-        priority: data.priority || 'MEDIUM'
-      },
-      include: {
-        user: {
-          select: {
-            id: true,
-            email: true,
-            role: true
-          }
-        }
-      }
-    });
-
-
-    // If no preferences exist, create default ones
     if (!preferences) {
-      await prisma.notificationPreferences.create({
-        data: { userId: data.userId }
+      preferences = await prisma.notificationPreferences.create({
+        data: {
+          userId: data.userId,
+          emailNotifications: true // ✅ DEFAULT ENABLED
+        }
       });
-      // Don't send email if just created default preferences
-      return notification;
     }
 
-    // Check if email notifications are globally enabled
+    // ===============================
+    // 1️⃣ DB NOTIFICATION (TYPE BASED)
+    // ===============================
+    const allowDbNotification = this.shouldSendNotificationForType(
+      data.type,
+      preferences
+    );
+
+    let notification: Notification | null = null;
+
+    if (allowDbNotification) {
+      notification = await prisma.notification.create({
+        data: {
+          userId: data.userId,
+          title: data.title,
+          message: data.message,
+          type: data.type,
+          metadata: data.metadata || {},
+          priority: data.priority || "MEDIUM"
+        }
+      });
+    } else {
+      console.log(
+        `[DB Notification Skipped] type=${data.type}, user=${data.userId}`
+      );
+    }
+
+    // ===============================
+    // 2️⃣ EMAIL (GLOBAL SWITCH)
+    // ===============================
     if (!preferences.emailNotifications) {
-      console.log(`Email notifications disabled for user ${data.userId}`);
+      console.log(`[Email Disabled by User] user=${data.userId}`);
       return notification;
     }
 
-    // Check if the specific notification type is enabled
-    const shouldSendEmail = this.shouldSendNotificationForType(data.type, preferences);
+    // if (this.isInQuietHours(preferences)) {
+    //   console.log(`[Email Blocked by Quiet Hours] user=${data.userId}`);
+    //   return notification;
+    // }
 
-
-
-    // Type-specific check (single source of truth)
-    if (!this.shouldSendNotificationForType(data.type, preferences)) {
-      console.log(`Notification type ${data.type} disabled for user ${data.userId}`);
-      return notification;
-    }
-    if (!shouldSendEmail) {
-      console.log(`Notification type ${data.type} disabled in preferences for user ${data.userId}`);
-      return notification;
-    }
-
-
-
-
-    // Check quiet hours (optional feature)
-    if (this.isInQuietHours(preferences)) {
-      console.log(`In quiet hours for user ${data.userId}, email will be sent later`);
-      return notification;
-    }
-
-    // Send email notification
+    // ===============================
+    // 3️⃣ SEND EMAIL
+    // ===============================
     try {
       await mailtrapService.sendHtmlEmail({
         to: targetUser.email,
         subject: data.title,
         html: this.generateEmailTemplate(data, targetUser)
       });
-      console.log(`Email notification sent to ${targetUser.email} for type ${data.type}`);
+
+      console.log(
+        `[Email Sent] to=${targetUser.email}, type=${data.type}`
+      );
     } catch (error) {
-      console.error("Failed to send notification email:", error);
+      console.error(`[Email Failed]`, error);
     }
 
     return notification;
   }
+
+
   ,
   // Helper method to check if specific notification type should be sent
   shouldSendNotificationForType(type: NotificationType, preferences: any): boolean {
@@ -702,13 +910,16 @@ export const NotificationService = {
         return preferences.contractReminders;
       case 'ASSESSMENT_DUE':
       case 'ASSESSMENT_SUBMITTED':
-        return preferences.assessmentReminders;
+        return preferences.assessmentReminders ; //ok
       case 'ASSESSMENT_APPROVED':
       case 'ASSESSMENT_REJECTED':
         return preferences.assessmentReminders;
       case 'PROBLEM_REPORTED':
+        return preferences.problemAlerts;
       case 'PROBLEM_UPDATED':
+        return preferences.problemAlerts;
       case 'PROBLEM_RESOLVED':
+        return preferences.problemAlerts;
       case 'SLA_BREACHED':
         return preferences.problemAlerts;
       case 'REPORT_GENERATED':
@@ -719,11 +930,10 @@ export const NotificationService = {
       case 'EVIDENCE_REQUESTED':
       case 'EVIDENCE_APPROVED':
       case 'EVIDENCE_REJECTED':
-        return preferences.complianceUpdates;
       case 'INVITATION_SENT':
       case 'INVITATION_ACCEPTED':
       case 'SYSTEM_ALERT':
-        return preferences.complianceUpdates || preferences.systemAlerts;
+        return  preferences.systemAlerts;
       default:
         return true;
     }
@@ -751,7 +961,7 @@ export const NotificationService = {
   ,
   // Helper method to generate email template
   generateEmailTemplate(data: any, user: any): string {
-    let actionButton = '';
+    // let actionButton = '';
 
     // Add appropriate action buttons based on notification type
     // if (data.metadata) {
@@ -807,9 +1017,7 @@ export const NotificationService = {
           </div>
         ` : ''}
       </div>
-      
-      ${actionButton}
-      
+        
       <div style="margin-top: 30px; padding-top: 20px; border-top: 1px solid #e0e0e0; font-size: 12px; color: #888;">
         <p>
           <strong>Note:</strong> You can manage your notification preferences in your account settings.
@@ -878,37 +1086,37 @@ export const NotificationService = {
   // }
 
   // ========== BULK CREATE NOTIFICATIONS WITH PREFERENCE CHECK ==========
-  async bulkCreateNotifications(
-    notificationsData: Array<{
-      userId: string;
-      title: string;
-      message: string;
-      type: NotificationType;
-      metadata?: any;
-      priority?: 'LOW' | 'MEDIUM' | 'HIGH';
-    }>
-  ): Promise<{ created: number; failed: number; notifications: Notification[] }> {
-    let created = 0;
-    let failed = 0;
-    const notifications: Notification[] = [];
+  // async bulkCreateNotifications(
+  //   notificationsData: Array<{
+  //     userId: string;
+  //     title: string;
+  //     message: string;
+  //     type: NotificationType;
+  //     metadata?: any;
+  //     priority?: 'LOW' | 'MEDIUM' | 'HIGH';
+  //   }>
+  // ): Promise<{ created: number; failed: number; notifications: Notification[] }> {
+  //   let created = 0;
+  //   let failed = 0;
+  //   const notifications: Notification[] = [];
 
-    for (const data of notificationsData) {
-      try {
-        const notification = await this.createNotification(data);
-        notifications.push(notification);
-        created++;
-      } catch (error) {
-        console.error(`Failed to create notification for user ${data.userId}:`, error);
-        failed++;
-      }
-    }
+  //   for (const data of notificationsData) {
+  //     try {
+  //       const notification = await this.createNotification(data);
+  //       notifications.push(notification);
+  //       created++;
+  //     } catch (error) {
+  //       console.error(`Failed to create notification for user ${data.userId}:`, error);
+  //       failed++;
+  //     }
+  //   }
 
-    return {
-      created,
-      failed,
-      notifications
-    };
-  },
+  //   return {
+  //     created,
+  //     failed,
+  //     notifications
+  //   };
+  // },
 
 
 
@@ -986,7 +1194,7 @@ export const NotificationService = {
         where: { userId: user.id }
       });
 
-      if (preferences?.emailNotifications && preferences.pushNotifications) {
+      if (preferences?.emailNotifications ) {
         try {
           await mailtrapService.sendHtmlEmail({
             to: user.email,

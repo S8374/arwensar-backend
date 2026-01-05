@@ -22,6 +22,7 @@
     "bcryptjs": "^3.0.3",
     "cloudinary": "^2.8.0",
     "cookie-parser": "^1.4.7",
+    "corn": "^0.0.1",
     "cors": "^2.8.5",
     "dotenv": "^17.2.2",
     "express": "^5.1.0",
@@ -42,6 +43,7 @@
   },
   "devDependencies": {
     "@types/cors": "^2.8.19",
+    "@types/cron": "^2.4.3",
     "@types/express": "^5.0.3",
     "@types/minio": "^7.1.1",
     "@types/node": "^24.5.0",

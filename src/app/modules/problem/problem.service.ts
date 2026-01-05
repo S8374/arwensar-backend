@@ -155,32 +155,6 @@ async createProblem(userId: string, data: any): Promise<any> {
 
         })
       );
-
-      // Email to supplier
-      try {
-        await mailtrapService.sendHtmlEmail({
-          to: supplier.user.email,
-          subject: `New Problem Reported: ${data.title}`,
-          html: `
-            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-              <h2>New Problem Reported</h2>
-              <p>Your vendor has reported an issue regarding your services.</p>
-              <div style="background:#f8f9fa;padding:20px;border-radius:8px;margin:20px 0;">
-                <p><strong>Title:</strong> ${data.title}</p>
-                <p><strong>Description:</strong> ${data.description}</p>
-                <p><strong>Priority:</strong> ${data.priority}</p>
-                ${data.dueDate ? `<p><strong>Due:</strong> ${new Date(data.dueDate).toLocaleDateString()}</p>` : ''}
-              </div>
-              <p>Please log in to respond.</p>
-              <a href="${process.env.FRONTEND_URL}/problems/${problem.id}" style="background:#007bff;color:white;padding:12px 30px;text-decoration:none;border-radius:5px;display:inline-block;">
-                View Problem
-              </a>
-            </div>
-          `
-        });
-      } catch (error) {
-        console.error("Failed to send email:", error);
-      }
     }
 
     if (data.direction === 'SUPPLIER_TO_VENDOR' && supplier.vendor.userId) {
