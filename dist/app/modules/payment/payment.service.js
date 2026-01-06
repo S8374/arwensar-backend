@@ -132,8 +132,8 @@ exports.PaymentService = {
                 mode: 'subscription',
                 line_items: [{ price: plan.stripePriceId, quantity: 1 }],
                 metadata,
-                success_url: `${config_1.config.FRONTEND_URL}/dashboard/payment/success?session_id={CHECKOUT_SESSION_ID}`,
-                cancel_url: `${config_1.config.FRONTEND_URL}/dashboard/pricing`,
+                success_url: `${config_1.config.FRONTEND_URL}/payment/success?session_id={CHECKOUT_SESSION_ID}`,
+                cancel_url: `${config_1.config.FRONTEND_URL}/pricing`,
                 billing_address_collection: 'required',
                 allow_promotion_codes: true,
                 payment_method_types: ['card'],
@@ -679,6 +679,135 @@ exports.PaymentService = {
                     cancellationDate: updatedSubscription.cancelledAt
                 }
             };
+        });
+    },
+    startFreeTrial(userId_1, planId_1) {
+        return __awaiter(this, arguments, void 0, function* (userId, planId, trialDays = 14) {
+            var _a, _b, _c, _d, _e, _f, _g, _h;
+            const user = yield prisma_1.prisma.user.findUnique({
+                where: { id: userId },
+                include: { vendorProfile: true }
+            });
+            if (!user || user.role !== "VENDOR") {
+                throw new ApiError_1.default(http_status_1.default.BAD_REQUEST, "Only vendors can start free trials");
+            }
+            const plan = yield prisma_1.prisma.plan.findUnique({
+                where: { id: planId }
+            });
+            if (!plan) {
+                throw new ApiError_1.default(http_status_1.default.NOT_FOUND, "Plan not found");
+            }
+            // Check if user already has a subscription
+            const existingSubscription = yield prisma_1.prisma.subscription.findUnique({
+                where: { userId }
+            });
+            const trialStart = new Date();
+            const trialEnd = new Date();
+            trialEnd.setDate(trialEnd.getDate() + trialDays);
+            let subscription;
+            if (existingSubscription) {
+                // Update existing subscription with trial
+                subscription = yield prisma_1.prisma.subscription.update({
+                    where: { id: existingSubscription.id },
+                    data: {
+                        planId: plan.id,
+                        status: 'TRIALING',
+                        trialStart,
+                        trialEnd,
+                        currentPeriodStart: trialStart,
+                        currentPeriodEnd: trialEnd,
+                    },
+                    include: {
+                        plan: true
+                    }
+                });
+            }
+            else {
+                // Create new subscription with trial
+                subscription = yield prisma_1.prisma.subscription.create({
+                    data: {
+                        userId,
+                        planId: plan.id,
+                        status: 'TRIALING',
+                        trialStart,
+                        trialEnd,
+                        currentPeriodStart: trialStart,
+                        currentPeriodEnd: trialEnd,
+                    },
+                    include: {
+                        plan: true
+                    }
+                });
+                // Create plan usage record for trial
+                const features = (0, getFeatures_1.getPlanFeatures)(plan);
+                const isEnterprisePlan = plan.type === "ENTERPRISE";
+                yield prisma_1.prisma.planLimitData.create({
+                    data: {
+                        subscriptionId: subscription.id,
+                        suppliersUsed: isEnterprisePlan ? null : ((_a = features.supplierLimit) !== null && _a !== void 0 ? _a : 0),
+                        assessmentsUsed: isEnterprisePlan ? null : ((_b = features.assessmentLimit) !== null && _b !== void 0 ? _b : 0),
+                        messagesUsed: isEnterprisePlan ? null : ((_c = features.messagesPerMonth) !== null && _c !== void 0 ? _c : 0),
+                        documentReviewsUsed: isEnterprisePlan ? null : ((_d = features.documentReviewsPerMonth) !== null && _d !== void 0 ? _d : 0),
+                        reportCreate: isEnterprisePlan ? null : ((_e = features.reportCreate) !== null && _e !== void 0 ? _e : 0),
+                        reportsGeneratedUsed: isEnterprisePlan ? null : ((_f = features.reportsGeneratedPerMonth) !== null && _f !== void 0 ? _f : 0),
+                        notificationsSend: isEnterprisePlan ? null : ((_g = features.notificationsSend) !== null && _g !== void 0 ? _g : 0),
+                        month: new Date().getMonth() + 1,
+                        year: new Date().getFullYear(),
+                    },
+                });
+            }
+            // Send trial started email
+            if ((_h = user.vendorProfile) === null || _h === void 0 ? void 0 : _h.businessEmail) {
+                try {
+                    yield mailtrap_service_1.mailtrapService.sendHtmlEmail({
+                        to: user.vendorProfile.businessEmail,
+                        subject: `🎉 Your Free Trial Has Started!`,
+                        html: `
+          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+            <h2 style="color: #1a5fb4;">Welcome to Your Free Trial!</h2>
+            <p>Your free trial for <strong>${plan.name}</strong> has been activated.</p>
+            
+            <div style="background-color: #f0f8ff; padding: 20px; border-radius: 8px; margin: 25px 0;">
+              <h3>Trial Details</h3>
+              <p><strong>Plan:</strong> ${plan.name}</p>
+              <p><strong>Trial Start:</strong> ${trialStart.toLocaleDateString()}</p>
+              <p><strong>Trial End:</strong> ${trialEnd.toLocaleDateString()}</p>
+              <p><strong>Trial Duration:</strong> ${trialDays} days</p>
+              <p><strong>Status:</strong> Active Trial</p>
+            </div>
+            
+            <p>You now have full access to all features of the ${plan.name} plan. Explore the platform and see how CyberNark can help secure your supply chain.</p>
+            
+            <div style="background-color: #f9f9f9; padding: 15px; border-radius: 6px; margin: 20px 0;">
+              <h4 style="margin-top: 0;">Trial Features:</h4>
+              <ul style="margin: 10px 0; padding-left: 20px;">
+                <li><strong>Suppliers:</strong> ${plan.supplierLimit === -1 ? 'Unlimited' : (plan.supplierLimit || 'Unlimited')}</li>
+                <li><strong>Assessments:</strong> ${plan.assessmentLimit === -1 ? 'Unlimited' : (plan.assessmentLimit || 'Unlimited')} per month</li>
+                <li><strong>Users:</strong> ${plan.userLimit === -1 ? 'Unlimited' : (plan.userLimit || 'Unlimited')}</li>
+              </ul>
+            </div>
+            
+            <p>After your trial ends, you'll need to choose a subscription plan to continue using the platform.</p>
+            
+            <div style="text-align: center; margin: 35px 0;">
+              <a href="${config_1.config.FRONTEND_URL}/dashboard" style="background-color: #1a5fb4; color: white; padding: 14px 32px; text-decoration: none; border-radius: 6px; font-weight: bold; font-size: 16px;">
+                Start Exploring →
+              </a>
+            </div>
+            
+            <p style="color: #666; font-size: 14px;">
+              Questions? Contact support anytime.<br>
+              © ${new Date().getFullYear()} CyberNark. All rights reserved.
+            </p>
+          </div>
+        `
+                    });
+                }
+                catch (error) {
+                    console.error("Failed to send trial started email:", error);
+                }
+            }
+            return subscription;
         });
     },
     // ========== WEBHOOK HANDLERS ==========

@@ -39,6 +39,7 @@
     "rate-limit-redis": "^4.3.1",
     "redis": "^5.10.0",
     "stripe": "^20.1.0",
+    "uuidv4": "^6.2.13",
     "zod": "^4.2.1"
   },
   "devDependencies": {

@@ -313,7 +313,6 @@ exports.AssessmentService = {
         });
     },
     // ========== CALCULATE BIV SCORES ==========
-    // Replace your current calculateBIVScores with this
     calculateBIVScores(answers) {
         if (!answers || answers.length === 0) {
             return {
@@ -661,57 +660,52 @@ exports.AssessmentService = {
                                 isResubmission: submission.status !== "DRAFT",
                             },
                         });
-                        // Send email to vendor
-                        try {
-                            const vendorUser = yield tx.user.findUnique({
-                                where: { id: vendor.userId },
-                                select: { email: true },
-                            });
-                            if (vendorUser === null || vendorUser === void 0 ? void 0 : vendorUser.email) {
-                                yield mailtrap_service_1.mailtrapService.sendHtmlEmail({
-                                    to: vendorUser.email,
-                                    subject: `New Assessment Submission: ${submission.assessment.title}`,
-                                    html: `
-                <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
-                  <h2>New Assessment Submitted</h2>
-                  <p>Hello${vendorUser.email},</p>
-                  <p>A supplier has submitted responses for review.</p>
-
-                  <div style="background:#f8f9fa;padding:20px;border-radius:8px;margin:20px 0;">
-                    <p><strong>Assessment:</strong> ${submission.assessment.title}</p>
-                    <p><strong>Overall Score:</strong> ${overallScore.toFixed(1)}%</p>
-                    <p><strong>Risk Level:</strong> 
-                      <span style="padding:4px 8px;border-radius:4px;font-weight:bold;
-                        background:${bivScores.riskLevel === 'HIGH' ? '#fee2e2;color:#dc2626' :
-                                        bivScores.riskLevel === 'MEDIUM' ? '#fef3c7;color:#d97706' :
-                                            '#d1fae5;color:#059669'}">
-                        ${bivScores.riskLevel}
-                      </span>
-                    </p>
-                  </div>
-
-                  <p>Please review the submission at your earliest convenience.</p>
-
-                  <div style="text-align:center;margin:30px 0;">
-                    <a href="${process.env.FRONTEND_URL}/vendor/assessments/submissions/${submissionId}"
-                       style="background:#007bff;color:white;padding:14px 28px;text-decoration:none;border-radius:6px;font-weight:bold;display:inline-block;">
-                      Review Submission Now
-                    </a>
-                  </div>
-
-                  <hr style="border:none;border-top:1px solid #eee;margin:30px 0;">
-                  <p style="color:#666;font-size:12px;text-align:center;">
-                    © ${new Date().getFullYear()} CyberNark. All rights reserved.
-                  </p>
-                </div>
-              `,
-                                });
-                            }
-                        }
-                        catch (error) {
-                            console.error("Failed to send submission notification email:", error);
-                            // Don't fail transaction due to email
-                        }
+                        // // Send email to vendor
+                        // try {
+                        //   const vendorUser = await tx.user.findUnique({
+                        //     where: { id: vendor.userId },
+                        //     select: { email: true },
+                        //   });
+                        //   if (vendorUser?.email) {
+                        //     await mailtrapService.sendHtmlEmail({
+                        //       to: vendorUser.email,
+                        //       subject: `New Assessment Submission: ${submission.assessment.title}`,
+                        //       html: `
+                        //         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+                        //           <h2>New Assessment Submitted</h2>
+                        //           <p>Hello${vendorUser.email },</p>
+                        //           <p>A supplier has submitted responses for review.</p>
+                        //           <div style="background:#f8f9fa;padding:20px;border-radius:8px;margin:20px 0;">
+                        //             <p><strong>Assessment:</strong> ${submission.assessment.title}</p>
+                        //             <p><strong>Overall Score:</strong> ${overallScore.toFixed(1)}%</p>
+                        //             <p><strong>Risk Level:</strong> 
+                        //               <span style="padding:4px 8px;border-radius:4px;font-weight:bold;
+                        //                 background:${bivScores.riskLevel === 'HIGH' ? '#fee2e2;color:#dc2626' : 
+                        //                               bivScores.riskLevel === 'MEDIUM' ? '#fef3c7;color:#d97706' : 
+                        //                               '#d1fae5;color:#059669'}">
+                        //                 ${bivScores.riskLevel}
+                        //               </span>
+                        //             </p>
+                        //           </div>
+                        //           <p>Please review the submission at your earliest convenience.</p>
+                        //           <div style="text-align:center;margin:30px 0;">
+                        //             <a href="${process.env.FRONTEND_URL}/vendor/assessments/submissions/${submissionId}"
+                        //                style="background:#007bff;color:white;padding:14px 28px;text-decoration:none;border-radius:6px;font-weight:bold;display:inline-block;">
+                        //               Review Submission Now
+                        //             </a>
+                        //           </div>
+                        //           <hr style="border:none;border-top:1px solid #eee;margin:30px 0;">
+                        //           <p style="color:#666;font-size:12px;text-align:center;">
+                        //             © ${new Date().getFullYear()} CyberNark. All rights reserved.
+                        //           </p>
+                        //         </div>
+                        //       `,
+                        //     });
+                        //   }
+                        // } catch (error) {
+                        //   console.error("Failed to send submission notification email:", error);
+                        //   // Don't fail transaction due to email
+                        // }
                     }
                 }
                 return updatedSubmission;
@@ -763,81 +757,73 @@ exports.AssessmentService = {
         });
     },
     // ========== NOTIFY VENDOR OF SUBMISSION ==========
-    notifyVendorOfSubmission(submission, result) {
-        return __awaiter(this, void 0, void 0, function* () {
-            if (!submission.vendorId)
-                return;
-            const vendor = yield prisma_1.prisma.vendor.findUnique({
-                where: { id: submission.vendorId },
-                include: { user: true }
-            });
-            if (!(vendor === null || vendor === void 0 ? void 0 : vendor.user))
-                return;
-            // Create notification
-            yield notification_service_1.NotificationService.createNotification({
-                userId: vendor.user.id,
-                title: "Assessment Submitted",
-                message: `Supplier has submitted assessment: "${submission.assessment.title}"`,
-                type: 'ASSESSMENT_SUBMITTED',
-                metadata: {
-                    submissionId: submission.id,
-                    assessmentId: submission.assessment.id,
-                    supplierId: submission.supplierId,
-                    score: result.overallScore,
-                    riskLevel: result.bivResult.riskLevel,
-                    bivScore: result.bivResult.bivScore
-                }
-            });
-            // Send email notification
-            try {
-                const supplier = yield prisma_1.prisma.supplier.findUnique({
-                    where: { id: submission.supplierId },
-                    select: { name: true }
-                });
-                yield mailtrap_service_1.mailtrapService.sendHtmlEmail({
-                    to: vendor.user.email,
-                    subject: `Assessment Submitted: ${submission.assessment.title}`,
-                    html: `
-          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-            <h2 style="color: #333;">Assessment Submitted</h2>
-            <p>${(supplier === null || supplier === void 0 ? void 0 : supplier.name) || 'A supplier'} has submitted an assessment for your review.</p>
-            
-            <div style="background-color: #f8f9fa; padding: 20px; border-radius: 5px; margin: 20px 0;">
-              <h3 style="margin-top: 0;">Assessment Details:</h3>
-              <p><strong>Assessment:</strong> ${submission.assessment.title}</p>
-              <p><strong>Supplier:</strong> ${(supplier === null || supplier === void 0 ? void 0 : supplier.name) || 'Unknown'}</p>
-              <p><strong>Score:</strong> ${result.overallScore.toFixed(1)}%</p>
-              <p><strong>BIV Score:</strong> ${result.bivResult.bivScore.toFixed(1)}%</p>
-              <p><strong>Risk Level:</strong> <span style="color: ${result.bivResult.riskLevel === 'HIGH' ? '#dc3545' :
-                        result.bivResult.riskLevel === 'MEDIUM' ? '#ffc107' : '#28a745'}">${result.bivResult.riskLevel}</span></p>
-              <p><strong>Submitted At:</strong> ${new Date().toLocaleString()}</p>
-            </div>
-            
-            <p>BIV Breakdown:</p>
-            <ul>
-              <li><strong>Business:</strong> ${result.bivResult.breakdown.business.toFixed(1)}%</li>
-              <li><strong>Integrity:</strong> ${result.bivResult.breakdown.integrity.toFixed(1)}%</li>
-              <li><strong>Availability:</strong> ${result.bivResult.breakdown.availability.toFixed(1)}%</li>
-            </ul>
-            
-            <div style="text-align: center; margin: 30px 0;">
-              <a href="${process.env.FRONTEND_URL}/vendor/assessments/submissions/${submission.id}" 
-                 style="background-color: #007bff; color: white; padding: 12px 30px; text-decoration: none; border-radius: 5px; font-weight: bold;">
-                Review Assessment
-              </a>
-            </div>
-            
-            <hr style="border: none; border-top: 1px solid #eee; margin: 20px 0;">
-            <p style="color: #666; font-size: 12px;">© ${new Date().getFullYear()} CyberNark. All rights reserved.</p>
-          </div>
-        `
-                });
-            }
-            catch (error) {
-                console.error("Failed to send assessment submission email:", error);
-            }
-        });
-    },
+    // async notifyVendorOfSubmission(submission: any, result: any): Promise<void> {
+    //   if (!submission.vendorId) return;
+    //   const vendor = await prisma.vendor.findUnique({
+    //     where: { id: submission.vendorId },
+    //     include: { user: true }
+    //   });
+    //   if (!vendor?.user) return;
+    //   // Create notification
+    //   await NotificationService.createNotification({
+    //     userId: vendor.user.id,
+    //     title: "Assessment Submitted",
+    //     message: `Supplier has submitted assessment: "${submission.assessment.title}"`,
+    //     type: 'ASSESSMENT_SUBMITTED',
+    //     metadata: {
+    //       submissionId: submission.id,
+    //       assessmentId: submission.assessment.id,
+    //       supplierId: submission.supplierId,
+    //       score: result.overallScore,
+    //       riskLevel: result.bivResult.riskLevel,
+    //       bivScore: result.bivResult.bivScore
+    //     }
+    //   });
+    //   // Send email notification
+    //   try {
+    //     const supplier = await prisma.supplier.findUnique({
+    //       where: { id: submission.supplierId },
+    //       select: { name: true }
+    //     });
+    //     await mailtrapService.sendHtmlEmail({
+    //       to: vendor.user.email,
+    //       subject: `Assessment Submitted: ${submission.assessment.title}`,
+    //       html: `
+    //         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+    //           <h2 style="color: #333;">Assessment Submitted</h2>
+    //           <p>${supplier?.name || 'A supplier'} has submitted an assessment for your review.</p>
+    //           <div style="background-color: #f8f9fa; padding: 20px; border-radius: 5px; margin: 20px 0;">
+    //             <h3 style="margin-top: 0;">Assessment Details:</h3>
+    //             <p><strong>Assessment:</strong> ${submission.assessment.title}</p>
+    //             <p><strong>Supplier:</strong> ${supplier?.name || 'Unknown'}</p>
+    //             <p><strong>Score:</strong> ${result.overallScore.toFixed(1)}%</p>
+    //             <p><strong>BIV Score:</strong> ${result.bivResult.bivScore.toFixed(1)}%</p>
+    //             <p><strong>Risk Level:</strong> <span style="color: ${result.bivResult.riskLevel === 'HIGH' ? '#dc3545' :
+    //           result.bivResult.riskLevel === 'MEDIUM' ? '#ffc107' : '#28a745'
+    //         }">${result.bivResult.riskLevel}</span></p>
+    //             <p><strong>Submitted At:</strong> ${new Date().toLocaleString()}</p>
+    //           </div>
+    //           <p>BIV Breakdown:</p>
+    //           <ul>
+    //             <li><strong>Business:</strong> ${result.bivResult.breakdown.business.toFixed(1)}%</li>
+    //             <li><strong>Integrity:</strong> ${result.bivResult.breakdown.integrity.toFixed(1)}%</li>
+    //             <li><strong>Availability:</strong> ${result.bivResult.breakdown.availability.toFixed(1)}%</li>
+    //           </ul>
+    //           <div style="text-align: center; margin: 30px 0;">
+    //             <a href="${process.env.FRONTEND_URL}/vendor/assessments/submissions/${submission.id}" 
+    //                style="background-color: #007bff; color: white; padding: 12px 30px; text-decoration: none; border-radius: 5px; font-weight: bold;">
+    //               Review Assessment
+    //             </a>
+    //           </div>
+    //           <hr style="border: none; border-top: 1px solid #eee; margin: 20px 0;">
+    //           <p style="color: #666; font-size: 12px;">© ${new Date().getFullYear()} CyberNark. All rights reserved.</p>
+    //         </div>
+    //       `
+    //     });
+    //   } catch (error) {
+    //     console.error("Failed to send assessment submission email:", error);
+    //   }
+    // },
     // ========== REVIEW ASSESSMENT ==========
     reviewAssessment(submissionId, reviewerId, data) {
         return __awaiter(this, void 0, void 0, function* () {
@@ -951,44 +937,6 @@ exports.AssessmentService = {
                             reviewedBy: reviewer.role
                         }
                     });
-                    // Send email to supplier
-                    try {
-                        yield mailtrap_service_1.mailtrapService.sendHtmlEmail({
-                            to: submission.user.email,
-                            subject: `Assessment ${data.status}: ${submission.assessment.title}`,
-                            html: `
-              <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-                <h2 style="color: #333;">Assessment ${data.status}</h2>
-                <p>Your assessment "${submission.assessment.title}" has been ${data.status.toLowerCase()}.</p>
-                
-                ${data.reviewComments ? `
-                  <div style="background-color: #f8f9fa; padding: 20px; border-radius: 5px; margin: 20px 0;">
-                    <h3 style="margin-top: 0;">Review Comments:</h3>
-                    <p>${data.reviewComments}</p>
-                  </div>
-                ` : ''}
-
-                ${data.status !== 'APPROVED' ? `
-                  <div style="background-color: #fff3cd; padding: 15px; border-radius: 5px; margin: 20px 0; border-left: 4px solid #ffc107;">
-                    <p style="margin:0; color: #856404;"><strong>Note:</strong> Due to this rejection, your supplier risk scores have been reduced accordingly.</p>
-                  </div>
-                ` : ''}
-                
-                <div style="text-align: center; margin: 30px 0;">
-                  <a href="${process.env.FRONTEND_URL}/assessments/submissions/${submission.assessmentId}" style="background-color: #007bff; color: white; padding: 12px 30px; text-decoration: none; border-radius: 5px; font-weight: bold;">
-                    View Assessment
-                  </a>
-                </div>
-                
-                <hr style="border: none; border-top: 1px solid #eee; margin: 20px 0;">
-                <p style="color: #666; font-size: 12px;">© ${new Date().getFullYear()} CyberNark. All rights reserved.</p>
-              </div>
-            `
-                        });
-                    }
-                    catch (error) {
-                        console.error("Failed to send assessment review email:", error);
-                    }
                 }
                 return updatedSubmission;
             }));

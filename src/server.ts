@@ -55,17 +55,17 @@ async function bootstrap() {
             resetExpiredSubscriptions().catch(console.error);
         });
 
-        setTimeout(() => {
-            comprehensiveMonitorService.startAllMonitors();
-            console.log('📡 Comprehensive Monitoring: ACTIVE');
+        // setTimeout(() => {
+        //     comprehensiveMonitorService.startAllMonitors();
+        //     console.log('📡 Comprehensive Monitoring: ACTIVE');
 
-            // Log initial stats
-            comprehensiveMonitorService.getComprehensiveStats().then(stats => {
-                if (stats) {
-                    console.log('📊 Initial Monitoring Stats:', stats);
-                }
-            });
-        }, 20000); // 20 seconds after startup
+        //     // Log initial stats
+        //     comprehensiveMonitorService.getComprehensiveStats().then(stats => {
+        //         if (stats) {
+        //             console.log('📊 Initial Monitoring Stats:', stats);
+        //         }
+        //     });
+        // }, 20000); // 20 seconds after startup
 
 
 
@@ -78,17 +78,17 @@ async function bootstrap() {
 
 
  
-process.on('SIGTERM', () => {
-  console.log('🛑 SIGTERM received, stopping monitors...');
-  comprehensiveMonitorService.stopAllMonitors();
-  process.exit(0);
-});
+// process.on('SIGTERM', () => {
+//   console.log('🛑 SIGTERM received, stopping monitors...');
+//   comprehensiveMonitorService.stopAllMonitors();
+//   process.exit(0);
+// });
 
-process.on('SIGINT', () => {
-  console.log('🛑 SIGINT received, stopping monitors...');
-  comprehensiveMonitorService.stopAllMonitors();
-  process.exit(0);
-});
+// process.on('SIGINT', () => {
+//   console.log('🛑 SIGINT received, stopping monitors...');
+//   comprehensiveMonitorService.stopAllMonitors();
+//   process.exit(0);
+// });
 
 
 bootstrap();

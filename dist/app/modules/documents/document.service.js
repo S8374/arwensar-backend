@@ -144,47 +144,42 @@ exports.DocumentService = {
                         }
                     });
                     // Send email (optional)
-                    try {
-                        // You'll need vendor email — fetch from user if needed
-                        const vendorUser = yield prisma_1.prisma.user.findUnique({
-                            where: { id: vendor.userId },
-                            select: { email: true }
-                        });
-                        if (vendorUser === null || vendorUser === void 0 ? void 0 : vendorUser.email) {
-                            yield mailtrap_service_1.mailtrapService.sendHtmlEmail({
-                                to: vendorUser.email,
-                                subject: `New Document Uploaded by ${supplierName || 'Supplier'}`,
-                                html: `
-              <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-                <h2 style="color: #333;">New Document Uploaded</h2>
-                <p>Supplier <strong>${supplierName || 'A supplier'}</strong> has uploaded a new document.</p>
-                
-                <div style="background-color: #f8f9fa; padding: 20px; border-radius: 5px; margin: 20px 0;">
-                  <h3 style="margin-top: 0;">Document Details:</h3>
-                  <p><strong>Name:</strong> ${document.name}</p>
-                  <p><strong>Type:</strong> ${document.type}</p>
-                  <p><strong>Category:</strong> ${document.category || 'N/A'}</p>
-                  ${document.description ? `<p><strong>Description:</strong> ${document.description}</p>` : ''}
-                </div>
-                
-                <p>Please review and approve/reject this document.</p>
-                
-                <div style="text-align: center; margin: 30px 0;">
-                  <a href="${process.env.FRONTEND_URL}/documents/${document.id}" style="background-color: #007bff; color: white; padding: 12px 30px; text-decoration: none; border-radius: 5px; font-weight: bold;">
-                    Review Document
-                  </a>
-                </div>
-                
-                <hr style="border: none; border-top: 1px solid #eee; margin: 20px 0;">
-                <p style="color: #666; font-size: 12px;">© ${new Date().getFullYear()} CyberNark. All rights reserved.</p>
-              </div>
-            `
-                            });
-                        }
-                    }
-                    catch (error) {
-                        console.error("Failed to send document upload email:", error);
-                    }
+                    //     try {
+                    //         // You'll need vendor email — fetch from user if needed
+                    //         const vendorUser = await prisma.user.findUnique({
+                    //             where: { id: vendor.userId },
+                    //             select: { email: true }
+                    //         });
+                    //         if (vendorUser?.email) {
+                    //             await mailtrapService.sendHtmlEmail({
+                    //                 to: vendorUser.email,
+                    //                 subject: `New Document Uploaded by ${supplierName || 'Supplier'}`,
+                    //                 html: `
+                    //   <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+                    //     <h2 style="color: #333;">New Document Uploaded</h2>
+                    //     <p>Supplier <strong>${supplierName || 'A supplier'}</strong> has uploaded a new document.</p>
+                    //     <div style="background-color: #f8f9fa; padding: 20px; border-radius: 5px; margin: 20px 0;">
+                    //       <h3 style="margin-top: 0;">Document Details:</h3>
+                    //       <p><strong>Name:</strong> ${document.name}</p>
+                    //       <p><strong>Type:</strong> ${document.type}</p>
+                    //       <p><strong>Category:</strong> ${document.category || 'N/A'}</p>
+                    //       ${document.description ? `<p><strong>Description:</strong> ${document.description}</p>` : ''}
+                    //     </div>
+                    //     <p>Please review and approve/reject this document.</p>
+                    //     <div style="text-align: center; margin: 30px 0;">
+                    //       <a href="${process.env.FRONTEND_URL}/documents/${document.id}" style="background-color: #007bff; color: white; padding: 12px 30px; text-decoration: none; border-radius: 5px; font-weight: bold;">
+                    //         Review Document
+                    //       </a>
+                    //     </div>
+                    //     <hr style="border: none; border-top: 1px solid #eee; margin: 20px 0;">
+                    //     <p style="color: #666; font-size: 12px;">© ${new Date().getFullYear()} CyberNark. All rights reserved.</p>
+                    //   </div>
+                    // `
+                    //             });
+                    //         }
+                    //     } catch (error) {
+                    //         console.error("Failed to send document upload email:", error);
+                    //     }
                 }
             }
             return document;

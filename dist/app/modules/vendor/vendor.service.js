@@ -23,7 +23,6 @@ const mailtrap_service_1 = require("../../shared/mailtrap.service");
 const jwtHelper_1 = require("../../helper/jwtHelper");
 const config_1 = require("../../../config");
 exports.VendorService = {
-    // ========== DASHBOARD ==========
     // ========== GET VENDOR DASHBOARD STATS ==========
     getVendorDashboardStats(vendorId) {
         return __awaiter(this, void 0, void 0, function* () {
@@ -166,6 +165,13 @@ exports.VendorService = {
                 });
                 return Object.assign(Object.assign({}, problem), { supplier: supplier || { name: 'Unknown', email: 'Unknown' }, reportedBy: reportedByUser || { email: 'Unknown', role: 'Unknown' } });
             })));
+            const sendedAlertNotifications = yield prisma_1.prisma.notification.findMany({
+                where: {
+                    userId: vendor.userId,
+                    isRead: false,
+                    isDeleted: false
+                }
+            });
             // Filter documents that belong to this vendor
             const filteredDocuments = documents.filter(doc => {
                 if (doc.vendorId === vendorId)
@@ -197,7 +203,7 @@ exports.VendorService = {
             // ========== CALCULATE COMPLIANCE OVERVIEW ==========
             const complianceOverview = this.calculateComplianceOverview(suppliers);
             // ========== CALCULATE COMPLIANCE GAUGE ==========
-            const complianceGauge = this.calculateComplianceGauge(suppliers, enrichedAssessments, enrichedProblems, filteredDocuments);
+            const complianceGauge = this.calculateComplianceGauge(suppliers, enrichedAssessments, enrichedProblems, filteredDocuments, sendedAlertNotifications);
             // ========== CALCULATE ADDITIONAL STATS ==========
             const additionalStats = this.calculateAdditionalStats(filteredDocuments, contracts, suppliers, activities, notifications, (_a = vendor.user) === null || _a === void 0 ? void 0 : _a.lastLoginAt);
             // ========== CALCULATE CHARTS DATA ==========
@@ -414,9 +420,12 @@ exports.VendorService = {
             critical: suppliers.filter(s => s.riskLevel === 'CRITICAL').length
         };
         const totalSuppliers = suppliers.length;
-        const lowRisk = totalSuppliers > 0 ? (riskDistribution.low / totalSuppliers) * 100 : 0;
-        const mediumRisk = totalSuppliers > 0 ? (riskDistribution.medium / totalSuppliers) * 100 : 0;
-        const highRisk = totalSuppliers > 0 ? ((riskDistribution.high + riskDistribution.critical) / totalSuppliers) * 100 : 0;
+        // const lowRisk = totalSuppliers > 0 ? (riskDistribution.low / totalSuppliers) * 100 : 0;
+        // const mediumRisk = totalSuppliers > 0 ? (riskDistribution.medium / totalSuppliers) * 100 : 0;
+        // const highRisk = totalSuppliers > 0 ? ((riskDistribution.high + riskDistribution.critical) / totalSuppliers) * 100 : 0;
+        const lowRisk = riskDistribution.low;
+        const mediumRisk = riskDistribution.medium;
+        const highRisk = riskDistribution.high;
         // Calculate average BIV score
         const totalBIVScore = suppliers.reduce((sum, s) => { var _a; return sum + (((_a = s.bivScore) === null || _a === void 0 ? void 0 : _a.toNumber()) || 0); }, 0);
         const averageBIVScore = suppliers.length > 0 ? totalBIVScore / suppliers.length : 0;
@@ -445,20 +454,33 @@ exports.VendorService = {
         };
     },
     // ========== CALCULATE COMPLIANCE GAUGE ==========
-    calculateComplianceGauge(suppliers, assessments, problems, documents) {
+    calculateComplianceGauge(suppliers, assessments, problems, documents, sendedAlertNotifications) {
         // Define compliance criteria
         const compliantSuppliers = suppliers.filter(supplier => {
+            // Check if supplier has at least one approved assessment
             const hasApprovedAssessments = assessments.some(a => a.supplierId === supplier.id && a.status === 'APPROVED');
-            const hasActiveProblems = problems.some(p => p.supplierId === supplier.id &&
-                p.status !== 'RESOLVED');
-            const hasValidDocuments = documents.some(d => d.supplierId === supplier.id &&
-                d.status === 'APPROVED' &&
-                (!d.expiryDate || d.expiryDate > new Date()));
-            return hasApprovedAssessments && !hasActiveProblems && hasValidDocuments;
+            // Check if supplier has active problems
+            const hasActiveProblems = problems.some(p => p.supplierId === supplier.id && p.status !== 'RESOLVED');
+            // Check if supplier has at least one notification sent
+            const hasSentNotifications = sendedAlertNotifications.some(n => { var _a; return ((_a = n.metadata) === null || _a === void 0 ? void 0 : _a.supplierId) === supplier.id; });
+            // Return true only if all conditions are satisfied
+            return hasApprovedAssessments || !hasActiveProblems || hasSentNotifications;
         }).length;
+        console.log("Compliant Suppliers Count:", compliantSuppliers);
         const nonCompliantSuppliers = suppliers.length - compliantSuppliers;
-        const compliancePercentage = suppliers.length > 0 ?
-            (compliantSuppliers / suppliers.length) * 100 : 0;
+        // const compliancePercentage = suppliers.length > 50 ?
+        //   (compliantSuppliers / suppliers.length) * 100 : 0;
+        let compliancePercentage = 0;
+        // Each compliant supplier = 1%
+        // So if compliantSuppliers = 1 → 1%, 2 → 2%, etc.
+        if (compliantSuppliers > 0) {
+            compliancePercentage = compliantSuppliers;
+            // Cap at 100%
+            if (compliancePercentage > 100)
+                compliancePercentage = 100;
+        }
+        console.log("Compliance Percentage:", compliancePercentage, "%");
+        console.log("Compliance Percentage:", compliancePercentage, "%");
         // Calculate NIS2 compliance status
         const nis2Compliant = suppliers.filter(s => s.nis2Compliant).length;
         const partiallyCompliant = suppliers.filter(s => s.bivScore && s.bivScore >= 50 && s.bivScore < 71).length;

@@ -60,7 +60,6 @@ const getAssessmentById = (0, catchAsync_1.default)((req, res) => __awaiter(void
 const getSubmissions = (0, catchAsync_1.default)((req, res) => __awaiter(void 0, void 0, void 0, function* () {
     var _a;
     console.log("Hits.................................................");
-   
     const userId = (_a = req.user) === null || _a === void 0 ? void 0 : _a.userId;
     if (!userId) {
         return (0, sendResponse_1.default)(res, {

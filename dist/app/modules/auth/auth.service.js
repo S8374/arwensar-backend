@@ -92,29 +92,6 @@ exports.AuthService = {
                 });
                 return { user, vendor };
             }));
-            // // Generate and send OTP
-            // const otp = generateOTP();
-            // const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
-            // await prisma.oTP.create({
-            //   data: {
-            //     email: payload.email,
-            //     otp,
-            //     type: "EMAIL_VERIFICATION",
-            //     expiresAt,
-            //     userId: result.user.id
-            //   }
-            // });
-            // // Send verification email
-            // try {
-            //   await mailtrapService.sendOTPEmail({
-            //     email: payload.email,
-            //     name: payload.firstName || payload.companyName,
-            //     otp: otp,
-            //     type: 'verification'
-            //   });
-            // } catch (error) {
-            //   console.error("Failed to send verification email:", error);
-            // }
             return {
                 user: result.user,
                 vendor: result.vendor,
@@ -243,8 +220,129 @@ exports.AuthService = {
         });
     },
     // ========== LOGIN ==========
+    // async login(payload: any, req?: any): Promise<LoginResponse> {
+    //   const { email, password } = payload;
+    //   const user = await prisma.user.findUnique({
+    //     where: { email }
+    //   });
+    //   if (!user) {
+    //     throw new ApiError(httpStatus.NOT_FOUND, "User not found");
+    //   }
+    //   if (user.status !== "ACTIVE") {
+    //     throw new ApiError(httpStatus.FORBIDDEN, "Your account is not active");
+    //   }
+    //   if (!user.isVerified) {
+    //     throw new ApiError(httpStatus.FORBIDDEN, "Please verify your email first");
+    //   }
+    //   const isPasswordValid = await bcrypt.compare(password, user.password);
+    //   if (!isPasswordValid) {
+    //     throw new ApiError(httpStatus.UNAUTHORIZED, "Invalid credentials");
+    //   }
+    //   // === SAFE & CORRECT IP EXTRACTION ===
+    //   const getClientIp = (request: any): string => {
+    //     if (!request || !request.headers) return "unknown";
+    //     const forwarded = request.headers["x-forwarded-for"];
+    //     if (forwarded) {
+    //       return (Array.isArray(forwarded) ? forwarded[0] : forwarded.split(",")[0]).trim();
+    //     }
+    //     return (
+    //       request.headers["x-real-ip"] ||
+    //       request.headers["cf-connecting-ip"] ||
+    //       request.headers["true-client-ip"] ||
+    //       request.connection?.remoteAddress ||
+    //       request.socket?.remoteAddress ||
+    //       request.ip ||
+    //       "unknown"
+    //     );
+    //   };
+    //   const clientIp = getClientIp(req);
+    //   const userAgent = req?.headers["user-agent"] || payload.userAgent || "unknown";
+    //   // Update last login
+    //   await prisma.user.update({
+    //     where: { id: user.id },
+    //     data: { lastLoginAt: new Date() }
+    //   });
+    //   // Log activity
+    //   await prisma.activityLog.create({
+    //     data: {
+    //       userId: user.id,
+    //       action: "LOGIN",
+    //       entityType: "USER",
+    //       entityId: user.id,
+    //       ipAddress: clientIp,
+    //       userAgent: userAgent,
+    //       details: {
+    //         ip: clientIp,
+    //         userAgent: userAgent,
+    //         timestamp: new Date().toISOString(),
+    //         method: "email_password"
+    //       }
+    //     }
+    //   });
+    //   // === Load Vendor + Subscription (with Plan) ===
+    //   let vendor: any = null;
+    //   if (user.role === "VENDOR" && user.vendorId) {
+    //     const vendorData = await prisma.vendor.findUnique({
+    //       where: { id: user.vendorId }
+    //     });
+    //     if (vendorData) {
+    //       const subscription = await prisma.subscription.findUnique({
+    //         where: { userId: user.id },
+    //         include: {
+    //           plan: true,
+    //           PlanLimitData: true // Optional: include usage if needed
+    //         }
+    //       });
+    //       vendor = {
+    //         ...vendorData,
+    //         subscription: subscription ? {
+    //           ...subscription,
+    //           plan: subscription.plan,
+    //         } : null
+    //       };
+    //     }
+    //   }
+    //   // === Load Supplier Profile ===
+    //   let supplier: any = null;
+    //   if (user.role === "SUPPLIER" && user.supplierId) {
+    //     supplier = await prisma.supplier.findUnique({
+    //       where: { id: user.supplierId },
+    //       include: {
+    //         vendor: {
+    //           select: { id: true, companyName: true }
+    //         }
+    //       }
+    //     });
+    //   }
+    //   // === Generate Tokens ===
+    //   const accessToken = jwtHelper.generateToken(
+    //     {
+    //       userId: user.id,
+    //       email: user.email,
+    //       role: user.role,
+    //       vendorId: vendor?.id || undefined,
+    //       supplierId: supplier?.id || undefined,
+    //     },
+    //     config.jwt.jwt_secret as string,
+    //     config.jwt.expires_in as string
+    //   );
+    //   const refreshToken = jwtHelper.generateToken(
+    //     { userId: user.id },
+    //     config.jwt.refresh_token_secret as string,
+    //     config.jwt.refresh_token_expires_in as string
+    //   );
+    //   return {
+    //     user,
+    //     vendor,           // Includes subscription with plan
+    //     supplier,
+    //     accessToken,
+    //     refreshToken
+    //   };
+    // },
+    // ========== LOGIN ==========
     login(payload, req) {
         return __awaiter(this, void 0, void 0, function* () {
+            var _a, _b, _c, _d;
             const { email, password } = payload;
             const user = yield prisma_1.prisma.user.findUnique({
                 where: { email }
@@ -310,14 +408,177 @@ exports.AuthService = {
                     where: { id: user.vendorId }
                 });
                 if (vendorData) {
-                    const subscription = yield prisma_1.prisma.subscription.findUnique({
+                    let subscription = yield prisma_1.prisma.subscription.findUnique({
                         where: { userId: user.id },
                         include: {
                             plan: true,
-                            PlanLimitData: true // Optional: include usage if needed
+                            PlanLimitData: true
                         }
                     });
-                    vendor = Object.assign(Object.assign({}, vendorData), { subscription: subscription ? Object.assign(Object.assign({}, subscription), { plan: subscription.plan }) : null });
+                    // === CREATE TRIAL SUBSCRIPTION IF NONE EXISTS ===
+                    if (!subscription) {
+                        // Find the default FREE plan
+                        const freePlan = yield prisma_1.prisma.plan.findFirst({
+                            where: {
+                                type: 'FREE',
+                                isActive: true
+                            }
+                        });
+                        if (!freePlan) {
+                            throw new ApiError_1.default(http_status_1.default.INTERNAL_SERVER_ERROR, "No free plan available");
+                        }
+                        // Calculate trial dates
+                        const now = new Date();
+                        const trialEnd = new Date();
+                        trialEnd.setDate(trialEnd.getDate() + freePlan.trialDays);
+                        // Create trial subscription
+                        subscription = yield prisma_1.prisma.subscription.create({
+                            data: {
+                                userId: user.id,
+                                planId: freePlan.id,
+                                status: 'TRIALING',
+                                billingCycle: freePlan.billingCycle,
+                                trialStart: now,
+                                trialEnd: trialEnd,
+                                currentPeriodStart: now,
+                                currentPeriodEnd: trialEnd,
+                                // Create PlanLimitData with initial usage (all zeros)
+                                PlanLimitData: {
+                                    create: {
+                                        suppliersUsed: 0,
+                                        assessmentsUsed: 0,
+                                        messagesUsed: 0,
+                                        documentReviewsUsed: 0,
+                                        reportCreate: 0,
+                                        reportsGeneratedUsed: 0,
+                                        notificationsSend: 0,
+                                        test: 0,
+                                        month: now.getMonth() + 1,
+                                        year: now.getFullYear()
+                                    }
+                                }
+                            },
+                            include: {
+                                plan: true,
+                                PlanLimitData: true
+                            }
+                        });
+                        // Log subscription creation
+                        yield prisma_1.prisma.activityLog.create({
+                            data: {
+                                userId: user.id,
+                                action: "SUBSCRIPTION_CREATED",
+                                entityType: "SUBSCRIPTION",
+                                entityId: subscription.id,
+                                ipAddress: clientIp,
+                                userAgent: userAgent,
+                                details: {
+                                    plan: freePlan.name,
+                                    type: freePlan.type,
+                                    trialDays: freePlan.trialDays,
+                                    trialEnd: trialEnd.toISOString(),
+                                    price: freePlan.price.toString()
+                                }
+                            }
+                        });
+                        // Send welcome email with trial info
+                        try {
+                            yield mailtrap_service_1.mailtrapService.sendHtmlEmail({
+                                to: user.email,
+                                subject: `🎉 Welcome to ${freePlan.name} Plan - Your ${freePlan.trialDays}-Day Trial Started!`,
+                                html: `
+              <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+                <h2>Welcome to Your Free Trial!</h2>
+                <p>Hello ${vendorData.companyName || 'Vendor'},</p>
+                
+                <div style="background-color: #f8f9fa; padding: 20px; border-radius: 8px; margin: 20px 0;">
+                  <h3 style="color: #28a745;">${freePlan.name} Plan Activated</h3>
+                  <p><strong>Trial Period:</strong> ${freePlan.trialDays} days</p>
+                  <p><strong>Trial Ends:</strong> ${trialEnd.toLocaleDateString()}</p>
+                  <p><strong>Plan Features:</strong></p>
+                  <ul>
+                    <li>Suppliers: ${freePlan.supplierLimit || 0}</li>
+                    <li>Assessments: ${freePlan.assessmentLimit || 0}</li>
+                    <li>Storage: ${freePlan.storageLimit || 0}MB</li>
+                    <li>Users: ${freePlan.userLimit || 0}</li>
+                  </ul>
+                </div>
+                
+                <p>Start adding your suppliers and assessments to make the most of your trial!</p>
+                
+                <div style="text-align: center; margin: 30px 0;">
+                  <a href="${process.env.FRONTEND_URL || '#'}/dashboard" 
+                     style="background-color: #007bff; color: white; padding: 12px 30px; text-decoration: none; border-radius: 5px;">
+                    Go to Dashboard
+                  </a>
+                </div>
+                
+                <hr style="border: none; border-top: 1px solid #eee;">
+                <p style="color: #666; font-size: 12px;">
+                  © ${new Date().getFullYear()} Your App. All rights reserved.
+                </p>
+              </div>
+            `
+                            });
+                        }
+                        catch (error) {
+                            console.error("Failed to send trial welcome email:", error);
+                        }
+                    }
+                    else {
+                        // Check if trial has expired
+                        const now = new Date();
+                        if (subscription.status === 'TRIALING' && subscription.trialEnd && subscription.trialEnd < now) {
+                            // Trial expired - update status
+                            subscription = yield prisma_1.prisma.subscription.update({
+                                where: { id: subscription.id },
+                                data: {
+                                    status: 'EXPIRED',
+                                    currentPeriodEnd: subscription.trialEnd
+                                },
+                                include: {
+                                    plan: true,
+                                    PlanLimitData: true
+                                }
+                            });
+                            // Send trial expired notification
+                            try {
+                                yield mailtrap_service_1.mailtrapService.sendHtmlEmail({
+                                    to: user.email,
+                                    subject: `⚠️ Your Free Trial Has Ended`,
+                                    html: `
+                <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+                  <h2 style="color: #dc3545;">Trial Period Ended</h2>
+                  <p>Hello ${vendorData.companyName || 'Vendor'},</p>
+                  
+                  <div style="background-color: #fff3cd; padding: 20px; border-radius: 8px; margin: 20px 0; border-left: 4px solid #ffc107;">
+                    <h3>Your free trial has ended on ${(_a = subscription.trialEnd) === null || _a === void 0 ? void 0 : _a.toLocaleDateString()}</h3>
+                    <p>To continue using our services with full access, please upgrade to a paid plan.</p>
+                  </div>
+                  
+                  <div style="text-align: center; margin: 30px 0;">
+                    <a href="${process.env.FRONTEND_URL || '#'}/pricing" 
+                       style="background-color: #28a745; color: white; padding: 12px 30px; text-decoration: none; border-radius: 5px;">
+                      Upgrade Now
+                    </a>
+                  </div>
+                  
+                  <p>If you have any questions, please contact our support team.</p>
+                  
+                  <hr style="border: none; border-top: 1px solid #eee;">
+                  <p style="color: #666; font-size: 12px;">
+                    © ${new Date().getFullYear()} Your App. All rights reserved.
+                  </p>
+                </div>
+              `
+                                });
+                            }
+                            catch (error) {
+                                console.error("Failed to send trial expired email:", error);
+                            }
+                        }
+                    }
+                    vendor = Object.assign(Object.assign({}, vendorData), { subscription: subscription });
                 }
             }
             // === Load Supplier Profile ===
@@ -339,6 +600,8 @@ exports.AuthService = {
                 role: user.role,
                 vendorId: (vendor === null || vendor === void 0 ? void 0 : vendor.id) || undefined,
                 supplierId: (supplier === null || supplier === void 0 ? void 0 : supplier.id) || undefined,
+                subscriptionStatus: (_b = vendor === null || vendor === void 0 ? void 0 : vendor.subscription) === null || _b === void 0 ? void 0 : _b.status,
+                planType: (_d = (_c = vendor === null || vendor === void 0 ? void 0 : vendor.subscription) === null || _c === void 0 ? void 0 : _c.plan) === null || _d === void 0 ? void 0 : _d.type
             }, config_1.config.jwt.jwt_secret, config_1.config.jwt.expires_in);
             const refreshToken = jwtHelper_1.jwtHelper.generateToken({ userId: user.id }, config_1.config.jwt.refresh_token_secret, config_1.config.jwt.refresh_token_expires_in);
             return {

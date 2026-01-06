@@ -15,7 +15,6 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.ProblemService = void 0;
 const prisma_1 = require("../../shared/prisma");
 const http_status_1 = __importDefault(require("http-status"));
-const mailtrap_service_1 = require("../../shared/mailtrap.service");
 const notification_service_1 = require("../notification/notification.service");
 const ApiError_1 = __importDefault(require("../../../error/ApiError"));
 exports.ProblemService = {
@@ -140,34 +139,8 @@ exports.ProblemService = {
                         title: data.title,
                         priority: data.priority
                     },
-                    priority: data.priority === 'URGENT' ? 'HIGH' : 'MEDIUM'
+                    priority: data.priority === 'URGENT' ? 'HIGH' : 'MEDIUM',
                 }));
-                // Email to supplier
-                try {
-                    yield mailtrap_service_1.mailtrapService.sendHtmlEmail({
-                        to: supplier.user.email,
-                        subject: `New Problem Reported: ${data.title}`,
-                        html: `
-            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-              <h2>New Problem Reported</h2>
-              <p>Your vendor has reported an issue regarding your services.</p>
-              <div style="background:#f8f9fa;padding:20px;border-radius:8px;margin:20px 0;">
-                <p><strong>Title:</strong> ${data.title}</p>
-                <p><strong>Description:</strong> ${data.description}</p>
-                <p><strong>Priority:</strong> ${data.priority}</p>
-                ${data.dueDate ? `<p><strong>Due:</strong> ${new Date(data.dueDate).toLocaleDateString()}</p>` : ''}
-              </div>
-              <p>Please log in to respond.</p>
-              <a href="${process.env.FRONTEND_URL}/problems/${problem.id}" style="background:#007bff;color:white;padding:12px 30px;text-decoration:none;border-radius:5px;display:inline-block;">
-                View Problem
-              </a>
-            </div>
-          `
-                    });
-                }
-                catch (error) {
-                    console.error("Failed to send email:", error);
-                }
             }
             if (data.direction === 'SUPPLIER_TO_VENDOR' && supplier.vendor.userId) {
                 notifications.push(notification_service_1.NotificationService.createNotification({

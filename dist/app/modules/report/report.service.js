@@ -22,6 +22,7 @@ const mailtrap_service_1 = require("../../shared/mailtrap.service");
 const pdfGenerator_1 = require("../../../utils/pdfGenerator");
 const fs_1 = __importDefault(require("fs"));
 const path_1 = __importDefault(require("path"));
+const notification_service_1 = require("../notification/notification.service");
 exports.ReportService = {
     // ========== VALIDATE USER PERMISSIONS ==========
     validateUserPermissions(userId, requestedVendorId, requestedSupplierId) {
@@ -1758,7 +1759,7 @@ exports.ReportService = {
             });
             // Create notification for recipient
             if (recipientUserId) {
-                yield prisma_1.prisma.notification.create({
+                yield notification_service_1.NotificationService.createNotification({
                     data: {
                         userId: recipientUserId,
                         title: "New Report Received",
@@ -1916,7 +1917,7 @@ exports.ReportService = {
                 }
             });
             // Create notification
-            yield prisma_1.prisma.notification.create({
+            yield notification_service_1.NotificationService.createNotification({
                 data: {
                     userId,
                     title: "External Report Uploaded",

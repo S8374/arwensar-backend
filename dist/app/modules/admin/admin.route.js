@@ -26,7 +26,7 @@ router.get("/assessments", (0, auth_1.default)("ADMIN"), admin_controller_1.Admi
 // User Management
 router.get("/vendors", (0, auth_1.default)("ADMIN"), admin_controller_1.AdminController.getAllVendors);
 router.get("/suppliers", (0, auth_1.default)("ADMIN"), admin_controller_1.AdminController.getAllSuppliers);
-router.delete("/suppliers/:id", admin_controller_1.AdminController.deleteSupplier);
+router.delete("/suppliers/:id", (0, auth_1.default)("ADMIN", "VENDOR"), admin_controller_1.AdminController.deleteSupplier);
 // Reports
 router.post("/reports/:type", (0, auth_1.default)("ADMIN"), admin_controller_1.AdminController.generateReport);
 // ==================  Users =============

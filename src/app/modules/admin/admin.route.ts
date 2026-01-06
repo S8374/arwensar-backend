@@ -72,7 +72,11 @@ router.get(
   auth("ADMIN"),
   AdminController.getAllSuppliers
 );
-router.delete("/suppliers/:id",AdminController.deleteSupplier);
+router.delete(
+  "/suppliers/:id",
+  auth("ADMIN", "VENDOR"),
+
+  AdminController.deleteSupplier);
 
 // Reports
 router.post(
