@@ -7,7 +7,7 @@ import catchAsync from "../../shared/catchAsync";
 
 const getDashboardStats = catchAsync(async (req: Request, res: Response) => {
   const supplierId = req.user?.supplierId;
-  
+
   if (!supplierId) {
     return sendResponse(res, {
       statusCode: httpStatus.UNAUTHORIZED,
@@ -18,7 +18,7 @@ const getDashboardStats = catchAsync(async (req: Request, res: Response) => {
   }
 
   const stats = await SupplierService.getDashboardStats(supplierId);
-  
+
   sendResponse(res, {
     statusCode: httpStatus.OK,
     success: true,
@@ -29,7 +29,7 @@ const getDashboardStats = catchAsync(async (req: Request, res: Response) => {
 
 const getSupplierProfile = catchAsync(async (req: Request, res: Response) => {
   const supplierId = req.user?.supplierId;
-  
+
   if (!supplierId) {
     return sendResponse(res, {
       statusCode: httpStatus.UNAUTHORIZED,
@@ -40,7 +40,7 @@ const getSupplierProfile = catchAsync(async (req: Request, res: Response) => {
   }
 
   const profile = await SupplierService.getSupplierProfile(supplierId);
-  
+
   sendResponse(res, {
     statusCode: httpStatus.OK,
     success: true,
@@ -50,8 +50,10 @@ const getSupplierProfile = catchAsync(async (req: Request, res: Response) => {
 });
 
 const updateSupplierProfile = catchAsync(async (req: Request, res: Response) => {
-  const supplierId = req.user?.supplierId;
-  
+  console.log("Req user for update supplier",req.user);
+  // const supplierId = req.user?.supplierId;
+   const supplierId = req.params?.supplierId;
+
   if (!supplierId) {
     return sendResponse(res, {
       statusCode: httpStatus.UNAUTHORIZED,
@@ -62,7 +64,7 @@ const updateSupplierProfile = catchAsync(async (req: Request, res: Response) => 
   }
 
   const profile = await SupplierService.updateSupplierProfile(supplierId, req.body);
-  
+
   sendResponse(res, {
     statusCode: httpStatus.OK,
     success: true,
@@ -73,7 +75,7 @@ const updateSupplierProfile = catchAsync(async (req: Request, res: Response) => 
 
 const getAssessments = catchAsync(async (req: Request, res: Response) => {
   const supplierId = req.user?.supplierId;
-  
+
   if (!supplierId) {
     return sendResponse(res, {
       statusCode: httpStatus.UNAUTHORIZED,
@@ -84,7 +86,7 @@ const getAssessments = catchAsync(async (req: Request, res: Response) => {
   }
 
   const assessments = await SupplierService.getAssessments(supplierId);
-  
+
   sendResponse(res, {
     statusCode: httpStatus.OK,
     success: true,
@@ -94,12 +96,12 @@ const getAssessments = catchAsync(async (req: Request, res: Response) => {
 });
 
 const startAssessment = catchAsync(async (req: Request, res: Response) => {
-  console.log("Starting assessment", req.params , req.user);
+  console.log("Starting assessment", req.params, req.user);
   const supplierId = req.user?.userId;
   const { assessmentId } = req.params;
-   console.log("Assessment ID:", assessmentId, "Supplier ID:", supplierId);
+  console.log("Assessment ID:", assessmentId, "Supplier ID:", supplierId);
   if (!supplierId) {
-    return sendResponse(res , {
+    return sendResponse(res, {
       statusCode: httpStatus.UNAUTHORIZED,
       success: false,
       message: "Supplier ID not found",
@@ -112,7 +114,7 @@ const startAssessment = catchAsync(async (req: Request, res: Response) => {
     supplierId,
     req.user?.userId || ""
   );
-  
+
   sendResponse(res, {
     statusCode: httpStatus.OK,
     success: true,
@@ -123,14 +125,14 @@ const startAssessment = catchAsync(async (req: Request, res: Response) => {
 
 const saveAnswer = catchAsync(async (req: Request, res: Response) => {
   const { submissionId, questionId } = req.params;
-  
+
   const result = await SupplierService.saveAnswer(
     submissionId,
     questionId,
     req.body,
     req.user?.userId || ""
   );
-  
+
   sendResponse(res, {
     statusCode: httpStatus.OK,
     success: true,
@@ -141,12 +143,12 @@ const saveAnswer = catchAsync(async (req: Request, res: Response) => {
 
 const submitAssessment = catchAsync(async (req: Request, res: Response) => {
   const { submissionId } = req.params;
-  
+
   const result = await SupplierService.submitAssessment(
     submissionId,
     req.user?.userId || ""
   );
-  
+
   sendResponse(res, {
     statusCode: httpStatus.OK,
     success: true,
@@ -156,9 +158,9 @@ const submitAssessment = catchAsync(async (req: Request, res: Response) => {
 });
 const verifyInvitation = catchAsync(async (req: Request, res: Response) => {
   const { token } = req.params;
-  
+
   const result = await SupplierService.verifyInvitationToken(token);
-  
+
   sendResponse(res, {
     statusCode: httpStatus.OK,
     success: true,
@@ -179,6 +181,30 @@ const completeSupplierRegistration = catchAsync(async (req, res) => {
   });
 });
 
+const getSupplierContractStatus = catchAsync(async (req: Request, res: Response) => {
+  // Use supplierId from token
+  const supplierId = req.user?.supplierId;
+  if (!supplierId) {
+    return sendResponse(res, {
+      statusCode: httpStatus.UNAUTHORIZED,
+      success: false,
+      message: "Supplier ID missing in token",
+      data: undefined
+    });
+  }
+
+  const data = await SupplierService.getSupplierContractStatus(supplierId);
+
+  sendResponse(res, {
+    statusCode: httpStatus.OK,
+    success: true,
+    message: "Supplier contract status fetched successfully",
+    data,
+  });
+}
+)
+
+
 
 export const SupplierController = {
   getDashboardStats,
@@ -189,5 +215,6 @@ export const SupplierController = {
   saveAnswer,
   submitAssessment,
   verifyInvitation,
-  completeSupplierRegistration
+  completeSupplierRegistration,
+  getSupplierContractStatus
 };

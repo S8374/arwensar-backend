@@ -6,6 +6,8 @@ import { VendorService } from "./vendor.service";
 import { paginationHelper } from "../../helper/paginationHelper";
 import catchAsync from "../../shared/catchAsync";
 import { SupplierService } from "../supplier/supplier.service";
+import { usageService } from "../usage/usage.service";
+import ApiError from "../../../error/ApiError";
 
 const getDashboardStats = catchAsync(async (req: Request, res: Response) => {
   const vendorId = req.user?.vendorId;
@@ -202,7 +204,7 @@ export const createSupplier = catchAsync(
 const getSingleSupplierProgress = catchAsync(async (req: Request, res: Response) => {
   const vendorId = req.user?.vendorId;
   const { supplierId } = req.params;
-  
+
   if (!vendorId) {
     return sendResponse(res, {
       statusCode: httpStatus.UNAUTHORIZED,
@@ -213,7 +215,7 @@ const getSingleSupplierProgress = catchAsync(async (req: Request, res: Response)
   }
 
   const progress = await VendorService.getSingleSupplierProgress(supplierId, vendorId);
-  
+
   sendResponse(res, {
     statusCode: httpStatus.OK,
     success: true,
@@ -224,9 +226,9 @@ const getSingleSupplierProgress = catchAsync(async (req: Request, res: Response)
 // src/app/modules/vendor/vendor.controller.ts
 const bulkImportSuppliers = catchAsync(async (req: Request & { user?: any }, res: Response) => {
   console.log("Processing bulk import request");
-  
+
   const vendorId = req.user.vendorId;
-  
+
   if (!vendorId) {
     return sendResponse(res, {
       statusCode: httpStatus.BAD_REQUEST,
@@ -247,10 +249,24 @@ const bulkImportSuppliers = catchAsync(async (req: Request & { user?: any }, res
   }
 
   // Set bulk count for usage tracking middleware
-  (req as any).bulkCount = req.body.suppliers.length;
+  // (req as any).bulkCount = req.body.suppliers.length;
+  // Check capacity before processing
+  const capacityCheck = await usageService.checkBulkSupplierLimit(
+    vendorId,
+    req.body.suppliers.length
+  );
+  if (!capacityCheck.canProceed) {
+    throw new ApiError(httpStatus.PAYMENT_REQUIRED, capacityCheck.message!);
+  }
 
+  // Decrement usage for all suppliers
+  await usageService.decrementUsage(
+    vendorId,
+    'suppliersUsed',
+    req.body.suppliers.length
+  );
   const result = await VendorService.bulkImportSuppliers(vendorId, req.body);
-  
+
   sendResponse(res, {
     statusCode: httpStatus.OK,
     success: true,
@@ -261,7 +277,7 @@ const bulkImportSuppliers = catchAsync(async (req: Request & { user?: any }, res
 const resendInvitation = catchAsync(async (req: Request, res: Response) => {
   const vendorId = req.user?.vendorId;
   const { supplierId } = req.params;
-  
+
   if (!vendorId) {
     return sendResponse(res, {
       statusCode: httpStatus.UNAUTHORIZED,
@@ -272,7 +288,7 @@ const resendInvitation = catchAsync(async (req: Request, res: Response) => {
   }
 
   const result = await VendorService.resendInvitation(supplierId, vendorId);
-  
+
   sendResponse(res, {
     statusCode: httpStatus.OK,
     success: true,
@@ -283,7 +299,27 @@ const resendInvitation = catchAsync(async (req: Request, res: Response) => {
     }
   });
 });
+const getVendorSupplierContracts = catchAsync(async (req: Request, res: Response) => {
+  // Use vendorId from token
+  const vendorId = req.user?.vendorId;
+  if (!vendorId) {
+    return sendResponse(res, {
+      statusCode: httpStatus.UNAUTHORIZED,
+      success: false,
+      message: "Vendor ID missing in token",
+      data: undefined
+    });
+  }
 
+  const data = await VendorService.getVendorSupplierContracts(vendorId);
+
+  sendResponse(res, {
+    statusCode: httpStatus.OK,
+    success: true,
+    message: "Supplier contracts fetched successfully",
+    data,
+  });
+});
 
 export const VendorController = {
   getDashboardStats,
@@ -296,5 +332,6 @@ export const VendorController = {
   createSupplier,
   getSingleSupplierProgress,
   bulkImportSuppliers,
-  resendInvitation
+  resendInvitation,
+  getVendorSupplierContracts
 };

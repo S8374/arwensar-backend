@@ -57,7 +57,9 @@ const getSupplierProfile = (0, catchAsync_1.default)((req, res) => __awaiter(voi
 }));
 const updateSupplierProfile = (0, catchAsync_1.default)((req, res) => __awaiter(void 0, void 0, void 0, function* () {
     var _a;
-    const supplierId = (_a = req.user) === null || _a === void 0 ? void 0 : _a.supplierId;
+    console.log("Req user for update supplier", req.user);
+    // const supplierId = req.user?.supplierId;
+    const supplierId = (_a = req.params) === null || _a === void 0 ? void 0 : _a.supplierId;
     if (!supplierId) {
         return (0, sendResponse_1.default)(res, {
             statusCode: http_status_1.default.UNAUTHORIZED,
@@ -156,6 +158,26 @@ const completeSupplierRegistration = (0, catchAsync_1.default)((req, res) => __a
         data: result
     });
 }));
+const getSupplierContractStatus = (0, catchAsync_1.default)((req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    var _a;
+    // Use supplierId from token
+    const supplierId = (_a = req.user) === null || _a === void 0 ? void 0 : _a.supplierId;
+    if (!supplierId) {
+        return (0, sendResponse_1.default)(res, {
+            statusCode: http_status_1.default.UNAUTHORIZED,
+            success: false,
+            message: "Supplier ID missing in token",
+            data: undefined
+        });
+    }
+    const data = yield supplier_service_1.SupplierService.getSupplierContractStatus(supplierId);
+    (0, sendResponse_1.default)(res, {
+        statusCode: http_status_1.default.OK,
+        success: true,
+        message: "Supplier contract status fetched successfully",
+        data,
+    });
+}));
 exports.SupplierController = {
     getDashboardStats,
     getSupplierProfile,
@@ -165,5 +187,6 @@ exports.SupplierController = {
     saveAnswer,
     submitAssessment,
     verifyInvitation,
-    completeSupplierRegistration
+    completeSupplierRegistration,
+    getSupplierContractStatus
 };

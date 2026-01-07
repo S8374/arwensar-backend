@@ -45,7 +45,7 @@ router.get(
 router.post(
   "/suppliers/create",
   auth("VENDOR"),
- // checkUsage('suppliersUsed', 1), // Decrement by 1 per supplier
+  checkUsage('suppliersUsed', 1),
   VendorController.createSupplier
 );
 // Assessment Review
@@ -79,6 +79,12 @@ router.post(
   VendorController.resendInvitation
 );
 
+// Vendor routes (auth required)
+router.get(
+  "/contracts",
+  auth("VENDOR"),
+  VendorController.getVendorSupplierContracts
+);
 
 
 export const VendorRoutes = router;

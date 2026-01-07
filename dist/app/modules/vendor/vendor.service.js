@@ -199,7 +199,7 @@ exports.VendorService = {
             // ========== CALCULATE PROBLEM STATS ==========
             const problemStats = this.calculateProblemStats(enrichedProblems);
             // ========== CALCULATE CONTRACT STATS ==========
-            const contractStats = this.calculateContractStats(contracts, today);
+            const contractStats = this.calculateContractStats(contracts, today, suppliers);
             // ========== CALCULATE COMPLIANCE OVERVIEW ==========
             const complianceOverview = this.calculateComplianceOverview(suppliers);
             // ========== CALCULATE COMPLIANCE GAUGE ==========
@@ -376,40 +376,91 @@ exports.VendorService = {
         });
     },
     // ========== CALCULATE CONTRACT STATS ==========
-    calculateContractStats(contracts, today) {
+    calculateContractStats(contracts, today, suppliers) {
         const thirtyDaysFromNow = new Date(today);
         thirtyDaysFromNow.setDate(thirtyDaysFromNow.getDate() + 30);
-        const expiringContracts = contracts.filter(c => c.contractEndDate &&
-            c.contractEndDate > today &&
-            c.contractEndDate <= thirtyDaysFromNow).length;
-        const expiredContracts = contracts.filter(c => c.contractEndDate &&
-            c.contractEndDate < today).length;
-        const contractsByStatus = {
-            active: contracts.filter(c => c.contractEndDate && c.contractEndDate > today).length,
-            expiring: expiringContracts,
-            expired: expiredContracts,
-            terminated: contracts.filter(c => !c.contractEndDate).length
-        };
-        // Get recent expirations
-        const recentExpirations = contracts
-            .filter(c => c.contractEndDate && c.contractEndDate > today)
+        // Filter contracts with end dates
+        const contractsWithEndDate = contracts.filter(c => c.contractEndDate);
+        // Categorize contracts
+        const expiringContracts = contractsWithEndDate.filter(c => c.contractEndDate > today &&
+            c.contractEndDate <= thirtyDaysFromNow);
+        const expiredContracts = contractsWithEndDate.filter(c => c.contractEndDate < today);
+        const activeContracts = contractsWithEndDate.filter(c => c.contractEndDate > thirtyDaysFromNow);
+        // const contractsByStatus = {
+        //   active: activeContracts.length,
+        //   expiring: expiringContracts.length,
+        //   expired: expiredContracts.length,
+        //   terminated: contracts.filter(c => !c.contractEndDate).length,
+        //   total: contracts.length
+        // };
+        // Get recent expirations (contracts expiring soon)
+        const recentExpirations = expiringContracts
             .sort((a, b) => a.contractEndDate.getTime() - b.contractEndDate.getTime())
             .slice(0, 5)
             .map(c => {
             const daysRemaining = Math.ceil((c.contractEndDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+            // Find supplier details
+            const supplier = suppliers.find(s => s.id === c.supplierId) || {};
             return {
                 id: c.id,
-                supplierName: c.name,
+                supplierId: c.supplierId,
+                supplierName: c.name || supplier.name || 'Unknown Supplier',
+                supplierEmail: supplier.email || c.email || '',
+                contactPerson: supplier.contactPerson || c.contactPerson || '',
+                category: c.category || supplier.category || '',
+                criticality: c.criticality || supplier.criticality || 'MEDIUM',
+                contractStartDate: c.contractStartDate,
                 endDate: c.contractEndDate,
-                daysRemaining
+                daysRemaining,
+                contractValue: c.totalContractValue || supplier.totalContractValue || 0,
+                outstandingPayments: c.outstandingPayments || supplier.outstandingPayments || 0,
+                status: 'EXPIRING'
+            };
+        });
+        // Get expired contract details
+        const expiredContractsDetails = expiredContracts
+            .sort((a, b) => b.contractEndDate.getTime() - a.contractEndDate.getTime())
+            .slice(0, 10) // Show more expired contracts since they're important
+            .map(c => {
+            const daysExpired = Math.ceil((today.getTime() - c.contractEndDate.getTime()) / (1000 * 60 * 60 * 24));
+            // Find supplier details
+            const supplier = suppliers.find(s => s.id === c.supplierId) || {};
+            return {
+                id: c.id,
+                supplierId: c.supplierId,
+                supplierName: c.name || supplier.name || 'Unknown Supplier',
+                supplierEmail: supplier.email || c.email || '',
+                contactPerson: supplier.contactPerson || c.contactPerson || '',
+                category: c.category || supplier.category || '',
+                criticality: c.criticality || supplier.criticality || 'MEDIUM',
+                contractStartDate: c.contractStartDate,
+                endDate: c.contractEndDate,
+                daysExpired,
+                contractValue: c.totalContractValue || supplier.totalContractValue || 0,
+                outstandingPayments: c.outstandingPayments || supplier.outstandingPayments || 0,
+                status: 'EXPIRED',
+                isActive: supplier.isActive !== undefined ? supplier.isActive : true,
+                invitationStatus: supplier.invitationStatus || 'ACCEPTED',
+                lastAssessmentDate: supplier.lastAssessmentDate,
+                bivScore: supplier.bivScore,
             };
         });
         return {
-            expiringContracts,
-            expiredContracts,
-            contractsByStatus,
-            recentExpirations
+            // Summary statistics
+            expiringContracts: expiringContracts.length,
+            expiredContracts: expiredContracts.length,
+            totalContract: contracts.length,
+            // Detailed lists
+            recentExpirations, // Contracts expiring soon
+            expiredContractsDetails, // Expired contracts with details      
+            // Risk analysis
+            highRiskExpired: expiredContracts.filter(c => c.criticality === 'HIGH' || c.criticality === 'CRITICAL').length,
+            overdueRenewals: expiredContracts.filter(c => daysExpired(c.contractEndDate) > 30).length
         };
+        // Helper function to calculate days expired
+        function daysExpired(endDate) {
+            return Math.ceil((today.getTime() - endDate.getTime()) / (1000 * 60 * 60 * 24));
+        }
     },
     // ========== CALCULATE COMPLIANCE OVERVIEW ==========
     calculateComplianceOverview(suppliers) {
@@ -1382,5 +1433,53 @@ exports.VendorService = {
                 };
             }
         });
-    }
+    },
+    getVendorSupplierContracts(vendorId) {
+        return __awaiter(this, void 0, void 0, function* () {
+            const today = new Date();
+            const expiringSoonDate = new Date();
+            expiringSoonDate.setDate(today.getDate() + 30); // 3 days threshold
+            // Fetch suppliers for this vendor
+            const suppliers = yield prisma_1.prisma.supplier.findMany({
+                where: { vendorId },
+                orderBy: { contractEndDate: 'asc' }, // soonest first
+            });
+            const expiredSuppliers = suppliers.filter(s => s.contractEndDate && s.contractEndDate < today);
+            const expiringSoonSuppliers = suppliers.filter(s => s.contractEndDate && s.contractEndDate >= today && s.contractEndDate <= expiringSoonDate);
+            const activeSuppliers = suppliers.filter(s => s.contractEndDate && s.contractEndDate > expiringSoonDate);
+            return {
+                totalSuppliers: suppliers.length,
+                expiredCount: expiredSuppliers.length,
+                expiringSoonCount: expiringSoonSuppliers.length,
+                expiredSuppliers: expiredSuppliers.map(s => ({
+                    id: s.id,
+                    name: s.name,
+                    contactPerson: s.contactPerson,
+                    email: s.email,
+                    phone: s.phone,
+                    category: s.category,
+                    criticality: s.criticality,
+                    contractStartDate: s.contractStartDate,
+                    contractEndDate: s.contractEndDate,
+                    isActive: s.isActive,
+                })),
+                expiringSoonSuppliers: expiringSoonSuppliers.map(s => ({
+                    id: s.id,
+                    name: s.name,
+                    contactPerson: s.contactPerson,
+                    email: s.email,
+                    phone: s.phone,
+                    category: s.category,
+                    criticality: s.criticality,
+                    contractStartDate: s.contractStartDate,
+                    contractEndDate: s.contractEndDate,
+                    daysLeft: s.contractEndDate
+                        ? Math.ceil((s.contractEndDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24))
+                        : null,
+                    isActive: s.isActive,
+                })),
+                activeSuppliers: activeSuppliers.length,
+            };
+        });
+    },
 };

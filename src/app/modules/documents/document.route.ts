@@ -39,7 +39,7 @@ router.patch(
 router.post(
   "/:documentId/review",
   auth("VENDOR", "ADMIN"),
-   // checkUsage('documentReviewsUsed', 1),
+    checkUsage('documentReviewsUsed', 1),
   DocumentController.reviewDocument
 );
 
@@ -82,7 +82,7 @@ router.post(
 // Check expired documents (Admin only - usually scheduled)
 router.post(
   "/admin/check-expired",
-  auth("ADMIN"),
+  auth("ADMIN" , "VENDOR" , "SUPPLIER"),
   DocumentController.checkExpiredDocuments
 );
 // document.routes.ts

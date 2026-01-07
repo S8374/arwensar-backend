@@ -8,6 +8,7 @@ exports.DocumentRoutes = void 0;
 const express_1 = __importDefault(require("express"));
 const document_controller_1 = require("./document.controller");
 const auth_1 = __importDefault(require("../../middlewares/auth"));
+const planLimitMiddleware_1 = require("../../middlewares/planLimitMiddleware");
 const router = express_1.default.Router();
 // Upload document
 router.post("/upload", (0, auth_1.default)("ADMIN", "VENDOR", "SUPPLIER"), document_controller_1.DocumentController.uploadDocument);
@@ -18,9 +19,7 @@ router.get("/:documentId", (0, auth_1.default)("ADMIN", "VENDOR", "SUPPLIER"), d
 // Update document
 router.patch("/:documentId", (0, auth_1.default)("ADMIN", "VENDOR", "SUPPLIER"), document_controller_1.DocumentController.updateDocument);
 // Review document (Vendor/Admin)
-router.post("/:documentId/review", (0, auth_1.default)("VENDOR", "ADMIN"), 
-// checkUsage('documentReviewsUsed', 1),
-document_controller_1.DocumentController.reviewDocument);
+router.post("/:documentId/review", (0, auth_1.default)("VENDOR", "ADMIN"), (0, planLimitMiddleware_1.checkUsage)('documentReviewsUsed', 1), document_controller_1.DocumentController.reviewDocument);
 // Delete document
 router.delete("/:documentId", (0, auth_1.default)("ADMIN", "VENDOR", "SUPPLIER"), document_controller_1.DocumentController.deleteDocument);
 // Get document statistics
@@ -32,7 +31,7 @@ router.get("/expiring/soon", (0, auth_1.default)("ADMIN", "VENDOR", "SUPPLIER"),
 // Bulk update document status
 router.post("/bulk/update-status", (0, auth_1.default)("VENDOR", "ADMIN"), document_controller_1.DocumentController.bulkUpdateDocumentStatus);
 // Check expired documents (Admin only - usually scheduled)
-router.post("/admin/check-expired", (0, auth_1.default)("ADMIN"), document_controller_1.DocumentController.checkExpiredDocuments);
+router.post("/admin/check-expired", (0, auth_1.default)("ADMIN", "VENDOR", "SUPPLIER"), document_controller_1.DocumentController.checkExpiredDocuments);
 // document.routes.ts
 router.get('/user/:userID', (0, auth_1.default)('ADMIN', 'VENDOR', 'SUPPLIER'), document_controller_1.DocumentController.getMyDocuments);
 exports.DocumentRoutes = router;

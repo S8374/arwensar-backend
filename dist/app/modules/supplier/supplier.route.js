@@ -13,7 +13,7 @@ const router = express_1.default.Router();
 router.get("/dashboard", (0, auth_1.default)("SUPPLIER"), supplier_controller_1.SupplierController.getDashboardStats);
 // Profile
 router.get("/profile", (0, auth_1.default)("SUPPLIER"), supplier_controller_1.SupplierController.getSupplierProfile);
-router.patch("/profile", (0, auth_1.default)("SUPPLIER"), supplier_controller_1.SupplierController.updateSupplierProfile);
+router.patch("/profile/:supplierId", (0, auth_1.default)("SUPPLIER", "VENDOR"), supplier_controller_1.SupplierController.updateSupplierProfile);
 // Assessments
 router.get("/assessments", (0, auth_1.default)("SUPPLIER"), supplier_controller_1.SupplierController.getAssessments);
 router.post("/assessments/:assessmentId/start", (0, auth_1.default)("SUPPLIER"), supplier_controller_1.SupplierController.startAssessment);
@@ -21,4 +21,6 @@ router.post("/submissions/:submissionId/answers/:questionId", (0, auth_1.default
 router.post("/submissions/:submissionId/submit", (0, auth_1.default)("SUPPLIER"), supplier_controller_1.SupplierController.submitAssessment);
 router.get("/verify-invitation/:token", supplier_controller_1.SupplierController.verifyInvitation);
 router.post("/complete-registration", supplier_controller_1.SupplierController.completeSupplierRegistration);
+// Supplier routes (auth required)
+router.get("/contract", (0, auth_1.default)("SUPPLIER"), supplier_controller_1.SupplierController.getSupplierContractStatus);
 exports.SupplierRoutes = router;

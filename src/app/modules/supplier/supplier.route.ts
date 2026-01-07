@@ -20,8 +20,8 @@ router.get(
 );
 
 router.patch(
-  "/profile",
-  auth("SUPPLIER"),
+  "/profile/:supplierId",
+  auth("SUPPLIER" , "VENDOR"),
   SupplierController.updateSupplierProfile
 );
 
@@ -56,5 +56,11 @@ router.get(
 router.post(
   "/complete-registration",
   SupplierController.completeSupplierRegistration
+);
+// Supplier routes (auth required)
+router.get(
+  "/contract",
+  auth("SUPPLIER"),
+  SupplierController.getSupplierContractStatus
 );
 export const SupplierRoutes = router;

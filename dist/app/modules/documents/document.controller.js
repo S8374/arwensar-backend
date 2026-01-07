@@ -267,11 +267,11 @@ const checkExpiredDocuments = (0, catchAsync_1.default)((req, res) => __awaiter(
             where: { id: userId },
             select: { role: true }
         });
-        if ((user === null || user === void 0 ? void 0 : user.role) !== 'ADMIN') {
+        if (!userId) {
             return (0, sendResponse_1.default)(res, {
                 statusCode: http_status_1.default.FORBIDDEN,
                 success: false,
-                message: "Only admins can manually trigger expired document check",
+                message: "User not found",
                 data: null
             });
         }

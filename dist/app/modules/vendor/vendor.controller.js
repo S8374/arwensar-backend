@@ -18,6 +18,8 @@ const http_status_1 = __importDefault(require("http-status"));
 const vendor_service_1 = require("./vendor.service");
 const catchAsync_1 = __importDefault(require("../../shared/catchAsync"));
 const supplier_service_1 = require("../supplier/supplier.service");
+const usage_service_1 = require("../usage/usage.service");
+const ApiError_1 = __importDefault(require("../../../error/ApiError"));
 const getDashboardStats = (0, catchAsync_1.default)((req, res) => __awaiter(void 0, void 0, void 0, function* () {
     var _a;
     const vendorId = (_a = req.user) === null || _a === void 0 ? void 0 : _a.vendorId;
@@ -214,7 +216,14 @@ const bulkImportSuppliers = (0, catchAsync_1.default)((req, res) => __awaiter(vo
         });
     }
     // Set bulk count for usage tracking middleware
-    req.bulkCount = req.body.suppliers.length;
+    // (req as any).bulkCount = req.body.suppliers.length;
+    // Check capacity before processing
+    const capacityCheck = yield usage_service_1.usageService.checkBulkSupplierLimit(vendorId, req.body.suppliers.length);
+    if (!capacityCheck.canProceed) {
+        throw new ApiError_1.default(http_status_1.default.PAYMENT_REQUIRED, capacityCheck.message);
+    }
+    // Decrement usage for all suppliers
+    yield usage_service_1.usageService.decrementUsage(vendorId, 'suppliersUsed', req.body.suppliers.length);
     const result = yield vendor_service_1.VendorService.bulkImportSuppliers(vendorId, req.body);
     (0, sendResponse_1.default)(res, {
         statusCode: http_status_1.default.OK,
@@ -246,6 +255,26 @@ const resendInvitation = (0, catchAsync_1.default)((req, res) => __awaiter(void 
         }
     });
 }));
+const getVendorSupplierContracts = (0, catchAsync_1.default)((req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    var _a;
+    // Use vendorId from token
+    const vendorId = (_a = req.user) === null || _a === void 0 ? void 0 : _a.vendorId;
+    if (!vendorId) {
+        return (0, sendResponse_1.default)(res, {
+            statusCode: http_status_1.default.UNAUTHORIZED,
+            success: false,
+            message: "Vendor ID missing in token",
+            data: undefined
+        });
+    }
+    const data = yield vendor_service_1.VendorService.getVendorSupplierContracts(vendorId);
+    (0, sendResponse_1.default)(res, {
+        statusCode: http_status_1.default.OK,
+        success: true,
+        message: "Supplier contracts fetched successfully",
+        data,
+    });
+}));
 exports.VendorController = {
     getDashboardStats,
     getVendorProfile,
@@ -257,5 +286,6 @@ exports.VendorController = {
     createSupplier: exports.createSupplier,
     getSingleSupplierProgress,
     bulkImportSuppliers,
-    resendInvitation
+    resendInvitation,
+    getVendorSupplierContracts
 };

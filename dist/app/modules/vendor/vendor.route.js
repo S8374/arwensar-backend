@@ -11,6 +11,7 @@ const vendor_constant_1 = require("./vendor.constant");
 const auth_1 = __importDefault(require("../../middlewares/auth"));
 const validateRequest_1 = __importDefault(require("../../middlewares/validateRequest"));
 const client_1 = require("@prisma/client");
+const planLimitMiddleware_1 = require("../../middlewares/planLimitMiddleware");
 const router = express_1.default.Router();
 // Dashboard
 router.get("/dashboard", (0, auth_1.default)("VENDOR"), vendor_controller_1.VendorController.getDashboardStats);
@@ -20,13 +21,13 @@ router.patch("/profile", (0, auth_1.default)("VENDOR"), (0, validateRequest_1.de
 // Suppliers
 router.get("/suppliers", (0, auth_1.default)("VENDOR", "SUPPLIER"), vendor_controller_1.VendorController.getSuppliers);
 router.get("/suppliers/:supplierId", (0, auth_1.default)("VENDOR"), vendor_controller_1.VendorController.getSupplierById);
-router.post("/suppliers/create", (0, auth_1.default)("VENDOR"), 
-// checkUsage('suppliersUsed', 1), // Decrement by 1 per supplier
-vendor_controller_1.VendorController.createSupplier);
+router.post("/suppliers/create", (0, auth_1.default)("VENDOR"), (0, planLimitMiddleware_1.checkUsage)('suppliersUsed', 1), vendor_controller_1.VendorController.createSupplier);
 // Assessment Review
 router.post("/assessments/:submissionId/review", (0, auth_1.default)("VENDOR"), vendor_controller_1.VendorController.reviewAssessment);
 router.post("/evidence/:answerId/review", (0, auth_1.default)("VENDOR"), vendor_controller_1.VendorController.reviewEvidence);
 router.get("/suppliers/:supplierId/progress", (0, auth_1.default)("VENDOR"), vendor_controller_1.VendorController.getSingleSupplierProgress);
 router.post('/bulk-import', (0, auth_1.default)(client_1.UserRole.VENDOR), vendor_controller_1.VendorController.bulkImportSuppliers);
 router.post("/:supplierId/resend-invitation", (0, auth_1.default)("VENDOR"), vendor_controller_1.VendorController.resendInvitation);
+// Vendor routes (auth required)
+router.get("/contracts", (0, auth_1.default)("VENDOR"), vendor_controller_1.VendorController.getVendorSupplierContracts);
 exports.VendorRoutes = router;

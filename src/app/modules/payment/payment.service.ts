@@ -817,6 +817,7 @@ export const PaymentService = {
 
       // Create plan usage record for trial
       const features = getPlanFeatures(plan);
+      console.log("Free Plan features",features);
       const isEnterprisePlan = plan.type === "ENTERPRISE";
 
       await prisma.planLimitData.create({

@@ -22,7 +22,7 @@ router.get(
 // ========== MAIN REPORT ROUTES ==========
 router.post(
   '/',
-//  checkUsage('reportsGeneratedUsed', 1),
+  checkUsage('reportsGeneratedUsed', 1),
   validateRequest(reportValidation.generateReport),
   ReportController.generateReport
 );
@@ -30,6 +30,8 @@ router.post(
 router.post(
   '/bulk',
   validateRequest(reportValidation.bulkGenerate),
+  checkUsage('reportsGeneratedUsed', 1), 
+
   ReportController.bulkGenerateReports,
 );
 

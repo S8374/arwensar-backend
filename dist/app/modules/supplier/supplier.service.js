@@ -27,16 +27,34 @@ exports.SupplierService = {
     // ========== DASHBOARD ==========
     getDashboardStats(supplierId) {
         return __awaiter(this, void 0, void 0, function* () {
-            var _a;
+            var _a, _b, _c, _d, _e, _f;
             const supplier = yield prisma_1.prisma.supplier.findUnique({
                 where: { id: supplierId },
                 include: {
+                    user: {
+                        select: {
+                            id: true,
+                            email: true,
+                            status: true,
+                            lastLoginAt: true,
+                            profileImage: true
+                        }
+                    },
+                    vendor: {
+                        select: {
+                            id: true,
+                            companyName: true,
+                            contactNumber: true,
+                            businessEmail: true
+                        }
+                    },
                     assessmentSubmissions: {
                         include: {
                             assessment: {
                                 select: {
                                     id: true,
-                                    title: true
+                                    title: true,
+                                    stage: true
                                 }
                             }
                         },
@@ -47,43 +65,315 @@ exports.SupplierService = {
             if (!supplier) {
                 throw new ApiError_1.default(http_status_1.default.NOT_FOUND, "Supplier not found");
             }
-            const totalAssessments = supplier.assessmentSubmissions.length;
-            const pendingAssessments = supplier.assessmentSubmissions.filter(sub => sub.status === 'DRAFT' || sub.status === 'SUBMITTED' || sub.status === 'PENDING').length;
-            const completedAssessments = supplier.assessmentSubmissions.filter(sub => sub.status === 'APPROVED').length;
-            const averageScore = completedAssessments > 0 ?
-                supplier.assessmentSubmissions
-                    .filter(sub => sub.status === 'APPROVED')
-                    .reduce((sum, sub) => { var _a; return sum + (((_a = sub.score) === null || _a === void 0 ? void 0 : _a.toNumber()) || 0); }, 0) /
-                    completedAssessments : 0;
-            // Calculate NIS2 status
-            const requiredAssessments = 2; // Initial + Full assessment
-            const initialCompleted = supplier.initialAssessmentCompleted ? 1 : 0;
-            const fullCompleted = supplier.fullAssessmentCompleted ? 1 : 0;
-            const completedAssessmentsCount = initialCompleted + fullCompleted;
-            return {
-                totalAssessments,
-                pendingAssessments,
-                completedAssessments,
-                averageScore: parseFloat(averageScore.toFixed(2)),
-                riskLevel: supplier.riskLevel,
-                bivScore: ((_a = supplier.bivScore) === null || _a === void 0 ? void 0 : _a.toNumber()) || null,
-                nextAssessmentDue: supplier.nextAssessmentDue,
-                recentSubmissions: supplier.assessmentSubmissions.slice(0, 5).map(sub => {
-                    var _a;
-                    return ({
-                        id: sub.id,
-                        assessmentTitle: sub.assessment.title,
-                        status: sub.status,
-                        submittedAt: sub.submittedAt || sub.createdAt,
-                        score: ((_a = sub.score) === null || _a === void 0 ? void 0 : _a.toNumber()) || null
-                    });
-                }),
-                nis2Status: {
-                    isCompliant: supplier.nis2Compliant,
-                    progress: Math.round((completedAssessmentsCount / requiredAssessments) * 100),
-                    requiredAssessments,
-                    completedAssessments: completedAssessmentsCount
+            const today = new Date();
+            const thirtyDaysFromNow = new Date();
+            thirtyDaysFromNow.setDate(today.getDate() + 30);
+            // Get documents for this supplier
+            const documents = yield prisma_1.prisma.document.findMany({
+                where: {
+                    supplierId: supplierId,
+                    OR: [
+                        { uploadedById: supplier.userId },
+                        { supplierId: supplierId }
+                    ]
                 }
+            });
+            // Get problems for this supplier
+            const problems = yield prisma_1.prisma.problem.findMany({
+                where: {
+                    supplierId: supplierId,
+                    OR: [
+                        { reportedById: supplier.userId },
+                        { supplierId: supplierId }
+                    ]
+                }
+            });
+            // Get notifications count
+            const unreadNotifications = yield prisma_1.prisma.notification.count({
+                where: {
+                    userId: supplier.userId,
+                    isRead: false,
+                    isDeleted: false
+                }
+            });
+            // ========== CONTRACT INFO ==========
+            const contractEndDate = supplier.contractEndDate;
+            let daysUntilExpiry = null;
+            let isExpired = false;
+            let isExpiringSoon = false;
+            if (contractEndDate) {
+                const diffTime = contractEndDate.getTime() - today.getTime();
+                daysUntilExpiry = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+                isExpired = daysUntilExpiry < 0;
+                isExpiringSoon = daysUntilExpiry > 0 && daysUntilExpiry <= 30;
+            }
+            // ========== ASSESSMENT STATS ==========
+            const allAssessments = supplier.assessmentSubmissions;
+            const completedAssessments = allAssessments.filter(sub => sub.status === 'APPROVED');
+            const pendingAssessments = allAssessments.filter(sub => sub.status === 'PENDING' || sub.status === 'REJECTED');
+            const draftAssessments = allAssessments.filter(sub => sub.status === 'DRAFT');
+            const scores = completedAssessments
+                .map(sub => { var _a; return ((_a = sub.score) === null || _a === void 0 ? void 0 : _a.toNumber()) || 0; })
+                .filter(score => score > 0);
+            const averageScore = scores.length > 0
+                ? scores.reduce((sum, score) => sum + score, 0) / scores.length
+                : 0;
+            // Check for overdue assessments
+            const overdueAssessments = allAssessments.filter(sub => {
+                if (!sub.submittedAt || sub.status === 'APPROVED')
+                    return false;
+                const dueDate = new Date(sub.submittedAt);
+                dueDate.setDate(dueDate.getDate() + 14); // Assume 14 days for review
+                return dueDate < today;
+            }).length;
+            // ========== RISK STATS ==========
+            const lastAssessmentDate = supplier.lastAssessmentDate;
+            const nextAssessmentDue = supplier.nextAssessmentDue;
+            let daysUntilNextAssessment = null;
+            let isAssessmentOverdue = false;
+            if (nextAssessmentDue) {
+                const diffTime = nextAssessmentDue.getTime() - today.getTime();
+                daysUntilNextAssessment = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+                isAssessmentOverdue = daysUntilNextAssessment < 0;
+            }
+            // ========== DOCUMENT STATS ==========
+            const documentStats = {
+                totalDocuments: documents.length,
+                approvedDocuments: documents.filter(d => d.status === 'APPROVED').length,
+                pendingDocuments: documents.filter(d => d.status === 'PENDING' || d.status === 'UNDER_REVIEW').length,
+                rejectedDocuments: documents.filter(d => d.status === 'REJECTED').length,
+                expiredDocuments: documents.filter(d => {
+                    if (!d.expiryDate)
+                        return false;
+                    return new Date(d.expiryDate) < today && d.status !== 'EXPIRED';
+                }).length,
+                expiringSoonDocuments: documents.filter(d => {
+                    if (!d.expiryDate)
+                        return false;
+                    const expiryDate = new Date(d.expiryDate);
+                    return expiryDate > today && expiryDate <= thirtyDaysFromNow && d.status !== 'EXPIRED';
+                }).length,
+                byCategory: documents.reduce((acc, doc) => {
+                    const category = doc.category || 'UNCATEGORIZED';
+                    acc[category] = (acc[category] || 0) + 1;
+                    return acc;
+                }, {}),
+                byType: documents.reduce((acc, doc) => {
+                    const type = doc.type || 'UNKNOWN';
+                    acc[type] = (acc[type] || 0) + 1;
+                    return acc;
+                }, {})
+            };
+            // ========== PROBLEM STATS ==========
+            const openProblems = problems.filter(p => p.status === 'OPEN' || p.status === 'IN_PROGRESS');
+            const resolvedProblems = problems.filter(p => p.status === 'RESOLVED');
+            const highPriorityProblems = problems.filter(p => p.priority === 'HIGH' || p.priority === 'URGENT');
+            let totalResolutionTime = 0;
+            let resolvedWithTime = 0;
+            resolvedProblems.forEach(problem => {
+                if (problem.resolvedAt && problem.createdAt) {
+                    const resolutionTime = problem.resolvedAt.getTime() - problem.createdAt.getTime();
+                    totalResolutionTime += resolutionTime / (1000 * 60 * 60); // Convert to hours
+                    resolvedWithTime++;
+                }
+            });
+            const averageResolutionTime = resolvedWithTime > 0
+                ? totalResolutionTime / resolvedWithTime
+                : 0;
+            const problemStats = {
+                totalProblems: problems.length,
+                openProblems: openProblems.length,
+                resolvedProblems: resolvedProblems.length,
+                highPriorityProblems: highPriorityProblems.length,
+                averageResolutionTime: parseFloat(averageResolutionTime.toFixed(2)),
+                slaBreaches: problems.filter(p => p.slaBreached).length,
+                byType: problems.reduce((acc, problem) => {
+                    const type = problem.type;
+                    acc[type] = (acc[type] || 0) + 1;
+                    return acc;
+                }, {})
+            };
+            // ========== RECENT ACTIVITY ==========
+            const recentSubmissions = supplier.assessmentSubmissions
+                .slice(0, 5)
+                .map(sub => {
+                var _a;
+                return ({
+                    id: sub.id,
+                    assessmentTitle: sub.assessment.title,
+                    status: sub.status,
+                    submittedAt: sub.submittedAt || sub.createdAt,
+                    score: ((_a = sub.score) === null || _a === void 0 ? void 0 : _a.toNumber()) || null,
+                    stage: sub.assessment.stage
+                });
+            });
+            const recentDocuments = documents
+                .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
+                .slice(0, 5)
+                .map(doc => {
+                let daysUntilExpiryDoc = null;
+                if (doc.expiryDate) {
+                    const diffTime = new Date(doc.expiryDate).getTime() - today.getTime();
+                    daysUntilExpiryDoc = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+                }
+                return {
+                    id: doc.id,
+                    name: doc.name,
+                    type: doc.type,
+                    category: doc.category || 'UNCATEGORIZED',
+                    status: doc.status,
+                    uploadedAt: doc.createdAt,
+                    expiryDate: doc.expiryDate,
+                    daysUntilExpiry: daysUntilExpiryDoc
+                };
+            });
+            const recentProblems = problems
+                .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
+                .slice(0, 5)
+                .map(problem => ({
+                id: problem.id,
+                title: problem.title,
+                type: problem.type,
+                priority: problem.priority,
+                status: problem.status,
+                reportedAt: problem.createdAt,
+                dueDate: problem.dueDate
+            }));
+            // ========== ALERTS ==========
+            const alerts = {
+                contractExpiringSoon: isExpiringSoon && !isExpired,
+                assessmentDueSoon: daysUntilNextAssessment !== null && daysUntilNextAssessment > 0 && daysUntilNextAssessment <= 7,
+                assessmentOverdue: isAssessmentOverdue,
+                documentsExpiringSoon: documentStats.expiringSoonDocuments,
+                documentsExpired: documentStats.expiredDocuments,
+                highPriorityProblems: highPriorityProblems.length,
+                unreadNotifications
+            };
+            // ========== UPCOMING EVENTS ==========
+            const upcomingEvents = [];
+            // Add contract expiry if applicable
+            if (contractEndDate && !isExpired) {
+                const days = daysUntilExpiry;
+                upcomingEvents.push({
+                    type: 'CONTRACT_EXPIRY',
+                    title: 'Contract Expiry',
+                    date: contractEndDate,
+                    daysUntil: days,
+                    priority: days <= 7 ? 'HIGH' : days <= 30 ? 'MEDIUM' : 'LOW'
+                });
+            }
+            // Add next assessment due
+            if (nextAssessmentDue) {
+                const days = daysUntilNextAssessment;
+                upcomingEvents.push({
+                    type: 'ASSESSMENT_DUE',
+                    title: 'Next Assessment Due',
+                    date: nextAssessmentDue,
+                    daysUntil: Math.abs(days),
+                    priority: days < 0 ? 'HIGH' : days <= 7 ? 'MEDIUM' : 'LOW'
+                });
+            }
+            // Add document expiries in next 30 days
+            const expiringDocuments = documents.filter(doc => {
+                if (!doc.expiryDate)
+                    return false;
+                const expiryDate = new Date(doc.expiryDate);
+                return expiryDate > today && expiryDate <= thirtyDaysFromNow;
+            });
+            expiringDocuments.forEach(doc => {
+                const expiryDate = new Date(doc.expiryDate);
+                const days = Math.ceil((expiryDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+                upcomingEvents.push({
+                    type: 'DOCUMENT_EXPIRY',
+                    title: `${doc.name} Expiry`,
+                    date: expiryDate,
+                    daysUntil: days,
+                    priority: days <= 7 ? 'HIGH' : 'MEDIUM'
+                });
+            });
+            // Add problem due dates
+            const problemsWithDueDates = problems.filter(p => p.dueDate && p.status !== 'RESOLVED');
+            problemsWithDueDates.forEach(problem => {
+                const dueDate = new Date(problem.dueDate);
+                const days = Math.ceil((dueDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+                if (days <= 30) {
+                    upcomingEvents.push({
+                        type: 'PROBLEM_DUE',
+                        title: `Problem Due: ${problem.title}`,
+                        date: dueDate,
+                        daysUntil: days,
+                        priority: problem.priority === 'URGENT' || problem.priority === 'HIGH' ? 'HIGH' :
+                            days <= 3 ? 'HIGH' : days <= 7 ? 'MEDIUM' : 'LOW'
+                    });
+                }
+            });
+            // Sort upcoming events by date
+            upcomingEvents.sort((a, b) => a.daysUntil - b.daysUntil);
+            // ========== PERFORMANCE TREND ==========
+            // Calculate improvement trend based on last 3 assessments
+            const lastThreeAssessments = completedAssessments
+                .sort((a, b) => (b.submittedAt || b.createdAt).getTime() - (a.submittedAt || a.createdAt).getTime())
+                .slice(0, 3);
+            let improvementTrend = 'STABLE';
+            if (lastThreeAssessments.length >= 2) {
+                const scores = lastThreeAssessments.map(sub => { var _a; return ((_a = sub.score) === null || _a === void 0 ? void 0 : _a.toNumber()) || 0; });
+                if (scores[0] > scores[scores.length - 1]) {
+                    improvementTrend = 'IMPROVING';
+                }
+                else if (scores[0] < scores[scores.length - 1]) {
+                    improvementTrend = 'DECLINING';
+                }
+            }
+            // ========== RETURN COMPREHENSIVE STATS ==========
+            return {
+                supplierInfo: {
+                    id: supplier.id,
+                    name: supplier.name,
+                    email: supplier.email,
+                    contactPerson: supplier.contactPerson,
+                    phone: supplier.phone,
+                    category: supplier.category,
+                    criticality: supplier.criticality,
+                    status: supplier.isActive ? 'ACTIVE' : 'INACTIVE',
+                    isActive: supplier.isActive,
+                    nis2Compliant: false
+                },
+                contractInfo: {
+                    contractStartDate: supplier.contractStartDate,
+                    contractEndDate: supplier.contractEndDate,
+                    contractDocument: supplier.contractDocument,
+                    documentType: supplier.documentType,
+                    daysUntilExpiry,
+                    isExpired,
+                    isExpiringSoon
+                },
+                assessmentStats: {
+                    totalAssessments: allAssessments.length,
+                    pendingAssessments: pendingAssessments.length,
+                    completedAssessments: completedAssessments.length,
+                },
+                riskStats: {
+                    riskLevel: supplier.riskLevel,
+                    bivScore: ((_a = supplier.bivScore) === null || _a === void 0 ? void 0 : _a.toNumber()) || null,
+                    businessScore: ((_b = supplier.businessScore) === null || _b === void 0 ? void 0 : _b.toNumber()) || null,
+                    integrityScore: ((_c = supplier.integrityScore) === null || _c === void 0 ? void 0 : _c.toNumber()) || null,
+                    availabilityScore: ((_d = supplier.availabilityScore) === null || _d === void 0 ? void 0 : _d.toNumber()) || null,
+                    lastAssessmentDate: supplier.lastAssessmentDate,
+                    isAssessmentOverdue
+                },
+                performanceStats: {
+                    qualityRating: ((_e = supplier.overallScore) === null || _e === void 0 ? void 0 : _e.toNumber()) || null,
+                    overallScore: ((_f = supplier.overallScore) === null || _f === void 0 ? void 0 : _f.toNumber()) || null,
+                    improvementTrend
+                },
+                documentStats,
+                problemStats,
+                recentActivity: {
+                    submissions: recentSubmissions,
+                    documents: recentDocuments,
+                    problems: recentProblems
+                },
+                upcomingEvents: upcomingEvents.slice(0, 10) // Limit to top 10 events
             };
         });
     },
@@ -718,6 +1008,43 @@ exports.SupplierService = {
                 return updatedSubmission;
             }));
             return result;
+        });
+    },
+    getSupplierContractStatus(supplierId) {
+        return __awaiter(this, void 0, void 0, function* () {
+            const today = new Date();
+            const expiringSoonDate = new Date();
+            expiringSoonDate.setDate(today.getDate() + 30);
+            const supplier = yield prisma_1.prisma.supplier.findUnique({
+                where: { id: supplierId },
+            });
+            if (!supplier) {
+                throw new ApiError_1.default(http_status_1.default.NOT_FOUND, "Supplier not found");
+            }
+            let status = 'ACTIVE';
+            if (supplier.contractEndDate) {
+                if (supplier.contractEndDate < today)
+                    status = 'EXPIRED';
+                else if (supplier.contractEndDate <= expiringSoonDate)
+                    status = 'EXPIRING_SOON';
+            }
+            const daysLeft = supplier.contractEndDate
+                ? Math.ceil((supplier.contractEndDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24))
+                : null;
+            return {
+                supplierId: supplier.id,
+                name: supplier.name,
+                contactPerson: supplier.contactPerson,
+                email: supplier.email,
+                phone: supplier.phone,
+                category: supplier.category,
+                criticality: supplier.criticality,
+                contractStartDate: supplier.contractStartDate,
+                contractEndDate: supplier.contractEndDate,
+                daysLeft,
+                contractStatus: status,
+                isActive: supplier.isActive,
+            };
         });
     }
 };

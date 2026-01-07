@@ -9,41 +9,155 @@ import ApiError from "../../../error/ApiError";
 import { config } from "../../../config";
 import { calculateBIVScore } from "../../../logic/bivRiskCalculator";
 
+
+
 export interface SupplierDashboardStats {
-  totalAssessments: number;
-  pendingAssessments: number;
-  completedAssessments: number;
-  averageScore: number;
-  riskLevel: Criticality | null;
-  bivScore: number | null;
-  nextAssessmentDue: Date | null;
-  recentSubmissions: Array<{
+  // Basic supplier info
+  supplierInfo: {
     id: string;
-    assessmentTitle: string;
+    name: string;
+    email: string;
+    contactPerson: string;
+    phone: string;
+    category: string;
+    criticality: Criticality;
     status: string;
-    submittedAt: Date;
-    score: number | null;
-  }>;
-  nis2Status: {
-    isCompliant: boolean | null; // Change this to allow null
-    progress: number;
-    requiredAssessments: number;
-    completedAssessments: number;
+    isActive: boolean;
+    nis2Compliant: boolean;
+    avatar?: string;
   };
+  
+  // Contract information
+  contractInfo: {
+    contractStartDate: Date;
+    contractEndDate: Date | null;
+    contractDocument: string | null;
+    documentType: string | null;
+    daysUntilExpiry: number | null;
+    isExpired: boolean;
+    isExpiringSoon: boolean;
+  };
+  
+  // Assessment statistics
+  assessmentStats: {
+    totalAssessments: number;
+    pendingAssessments: number;
+    completedAssessments: number;   
+  };
+  
+  // Risk & Compliance
+  riskStats: {
+    riskLevel: Criticality | null;
+    bivScore: number | null;
+    businessScore: number | null;
+    integrityScore: number | null;
+    availabilityScore: number | null;
+    lastAssessmentDate: Date | null;
+    isAssessmentOverdue: boolean;
+  };
+  
+  // Performance metrics
+  performanceStats: {
+    qualityRating: number | null;
+    overallScore: number | null;
+    improvementTrend: 'IMPROVING' | 'DECLINING' | 'STABLE';
+  };
+  
+  // Document statistics
+  documentStats: {
+    totalDocuments: number;
+    approvedDocuments: number;
+    pendingDocuments: number;
+    rejectedDocuments: number;
+    expiredDocuments: number;
+    expiringSoonDocuments: number;
+    byCategory: Record<string, number>;
+    byType: Record<string, number>;
+  };
+  
+  // Problem statistics
+  problemStats: {
+    totalProblems: number;
+    openProblems: number;
+    resolvedProblems: number;
+    highPriorityProblems: number;
+    averageResolutionTime: number; // in hours
+    slaBreaches: number;
+    byType: Record<string, number>;
+  };
+  
+  // Recent activity
+  recentActivity: {
+    submissions: Array<{
+      id: string;
+      assessmentTitle: string;
+      status: string;
+      submittedAt: Date;
+      score: number | null;
+      stage: string;
+    }>;
+    documents: Array<{
+      id: string;
+      name: string;
+      type: string;
+      category: string;
+      status: string;
+      uploadedAt: Date;
+      expiryDate: Date | null;
+      daysUntilExpiry: number | null;
+    }>;
+    problems: Array<{
+      id: string;
+      title: string;
+      type: string;
+      priority: string;
+      status: string;
+      reportedAt: Date;
+      dueDate: Date | null;
+    }>;
+  };
+
+  
+  // Timeline for next 30 days
+  upcomingEvents: Array<{
+    type: 'CONTRACT_EXPIRY' | 'ASSESSMENT_DUE' | 'DOCUMENT_EXPIRY' | 'PROBLEM_DUE';
+    title: string;
+    date: Date;
+    daysUntil: number;
+    priority: 'HIGH' | 'MEDIUM' | 'LOW';
+  }>;
 }
 
 export const SupplierService = {
   // ========== DASHBOARD ==========
-  async getDashboardStats(supplierId: string): Promise<SupplierDashboardStats> {
+async getDashboardStats(supplierId: string): Promise<SupplierDashboardStats> {
     const supplier = await prisma.supplier.findUnique({
       where: { id: supplierId },
       include: {
+        user: {
+          select: {
+            id: true,
+            email: true,
+            status: true,
+            lastLoginAt: true,
+            profileImage: true
+          }
+        },
+        vendor: {
+          select: {
+            id: true,
+            companyName: true,
+            contactNumber: true,
+            businessEmail: true
+          }
+        },
         assessmentSubmissions: {
           include: {
             assessment: {
               select: {
                 id: true,
-                title: true
+                title: true,
+                stage: true
               }
             }
           },
@@ -56,47 +170,363 @@ export const SupplierService = {
       throw new ApiError(httpStatus.NOT_FOUND, "Supplier not found");
     }
 
-    const totalAssessments = supplier.assessmentSubmissions.length;
-    const pendingAssessments = supplier.assessmentSubmissions.filter(
-      sub => sub.status === 'DRAFT' || sub.status === 'SUBMITTED' || sub.status === 'PENDING'
-    ).length;
-    const completedAssessments = supplier.assessmentSubmissions.filter(
+    const today = new Date();
+    const thirtyDaysFromNow = new Date();
+    thirtyDaysFromNow.setDate(today.getDate() + 30);
+
+    // Get documents for this supplier
+    const documents = await prisma.document.findMany({
+      where: {
+        supplierId: supplierId,
+        OR: [
+          { uploadedById: supplier.userId as string },
+          { supplierId: supplierId }
+        ]
+      }
+    });
+
+    // Get problems for this supplier
+    const problems = await prisma.problem.findMany({
+      where: {
+        supplierId: supplierId,
+        OR: [
+          { reportedById: supplier.userId as string },
+          { supplierId: supplierId }
+        ]
+      }
+    });
+
+    // Get notifications count
+    const unreadNotifications = await prisma.notification.count({
+      where: {
+        userId: supplier.userId as string,
+        isRead: false,
+        isDeleted: false
+      }
+    });
+
+    // ========== CONTRACT INFO ==========
+    const contractEndDate = supplier.contractEndDate;
+    let daysUntilExpiry = null;
+    let isExpired = false;
+    let isExpiringSoon = false;
+
+    if (contractEndDate) {
+      const diffTime = contractEndDate.getTime() - today.getTime();
+      daysUntilExpiry = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+      isExpired = daysUntilExpiry < 0;
+      isExpiringSoon = daysUntilExpiry > 0 && daysUntilExpiry <= 30;
+    }
+
+    // ========== ASSESSMENT STATS ==========
+    const allAssessments = supplier.assessmentSubmissions;
+    const completedAssessments = allAssessments.filter(
       sub => sub.status === 'APPROVED'
-    ).length;
+    );
+    const pendingAssessments = allAssessments.filter(
+      sub => sub.status === 'PENDING' || sub.status === 'REJECTED' 
+    );
+    const draftAssessments = allAssessments.filter(
+      sub => sub.status === 'DRAFT'
+    );
 
-    const averageScore = completedAssessments > 0 ?
-      supplier.assessmentSubmissions
-        .filter(sub => sub.status === 'APPROVED')
-        .reduce((sum, sub) => sum + (sub.score?.toNumber() || 0), 0) /
-      completedAssessments : 0;
+    const scores = completedAssessments
+      .map(sub => sub.score?.toNumber() || 0)
+      .filter(score => score > 0);
 
-    // Calculate NIS2 status
-    const requiredAssessments = 2; // Initial + Full assessment
-    const initialCompleted = supplier.initialAssessmentCompleted ? 1 : 0;
-    const fullCompleted = supplier.fullAssessmentCompleted ? 1 : 0;
-    const completedAssessmentsCount = initialCompleted + fullCompleted;
+    const averageScore = scores.length > 0 
+      ? scores.reduce((sum, score) => sum + score, 0) / scores.length 
+      : 0;
 
-    return {
-      totalAssessments,
-      pendingAssessments,
-      completedAssessments,
-      averageScore: parseFloat(averageScore.toFixed(2)),
-      riskLevel: supplier.riskLevel,
-      bivScore: supplier.bivScore?.toNumber() || null,
-      nextAssessmentDue: supplier.nextAssessmentDue,
-      recentSubmissions: supplier.assessmentSubmissions.slice(0, 5).map(sub => ({
+    // Check for overdue assessments
+    const overdueAssessments = allAssessments.filter(sub => {
+      if (!sub.submittedAt || sub.status === 'APPROVED') return false;
+      const dueDate = new Date(sub.submittedAt);
+      dueDate.setDate(dueDate.getDate() + 14); // Assume 14 days for review
+      return dueDate < today;
+    }).length;
+
+    // ========== RISK STATS ==========
+    const lastAssessmentDate = supplier.lastAssessmentDate;
+    const nextAssessmentDue = supplier.nextAssessmentDue;
+    let daysUntilNextAssessment = null;
+    let isAssessmentOverdue = false;
+
+    if (nextAssessmentDue) {
+      const diffTime = nextAssessmentDue.getTime() - today.getTime();
+      daysUntilNextAssessment = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+      isAssessmentOverdue = daysUntilNextAssessment < 0;
+    }
+
+    // ========== DOCUMENT STATS ==========
+    const documentStats = {
+      totalDocuments: documents.length,
+      approvedDocuments: documents.filter(d => d.status === 'APPROVED').length,
+      pendingDocuments: documents.filter(d => d.status === 'PENDING' || d.status === 'UNDER_REVIEW').length,
+      rejectedDocuments: documents.filter(d => d.status === 'REJECTED').length,
+      expiredDocuments: documents.filter(d => {
+        if (!d.expiryDate) return false;
+        return new Date(d.expiryDate) < today && d.status !== 'EXPIRED';
+      }).length,
+      expiringSoonDocuments: documents.filter(d => {
+        if (!d.expiryDate) return false;
+        const expiryDate = new Date(d.expiryDate);
+        return expiryDate > today && expiryDate <= thirtyDaysFromNow && d.status !== 'EXPIRED';
+      }).length,
+      byCategory: documents.reduce((acc, doc) => {
+        const category = doc.category || 'UNCATEGORIZED';
+        acc[category] = (acc[category] || 0) + 1;
+        return acc;
+      }, {} as Record<string, number>),
+      byType: documents.reduce((acc, doc) => {
+        const type = doc.type || 'UNKNOWN';
+        acc[type] = (acc[type] || 0) + 1;
+        return acc;
+      }, {} as Record<string, number>)
+    };
+
+    // ========== PROBLEM STATS ==========
+    const openProblems = problems.filter(p => 
+      p.status === 'OPEN' || p.status === 'IN_PROGRESS'
+    );
+    const resolvedProblems = problems.filter(p => p.status === 'RESOLVED');
+    const highPriorityProblems = problems.filter(p => 
+      p.priority === 'HIGH' || p.priority === 'URGENT'
+    );
+    
+    let totalResolutionTime = 0;
+    let resolvedWithTime = 0;
+    
+    resolvedProblems.forEach(problem => {
+      if (problem.resolvedAt && problem.createdAt) {
+        const resolutionTime = problem.resolvedAt.getTime() - problem.createdAt.getTime();
+        totalResolutionTime += resolutionTime / (1000 * 60 * 60); // Convert to hours
+        resolvedWithTime++;
+      }
+    });
+
+    const averageResolutionTime = resolvedWithTime > 0 
+      ? totalResolutionTime / resolvedWithTime 
+      : 0;
+
+    const problemStats = {
+      totalProblems: problems.length,
+      openProblems: openProblems.length,
+      resolvedProblems: resolvedProblems.length,
+      highPriorityProblems: highPriorityProblems.length,
+      averageResolutionTime: parseFloat(averageResolutionTime.toFixed(2)),
+      slaBreaches: problems.filter(p => p.slaBreached).length,
+      byType: problems.reduce((acc, problem) => {
+        const type = problem.type;
+        acc[type] = (acc[type] || 0) + 1;
+        return acc;
+      }, {} as Record<string, number>)
+    };
+
+    // ========== RECENT ACTIVITY ==========
+    const recentSubmissions = supplier.assessmentSubmissions
+      .slice(0, 5)
+      .map(sub => ({
         id: sub.id,
         assessmentTitle: sub.assessment.title,
         status: sub.status,
         submittedAt: sub.submittedAt || sub.createdAt,
-        score: sub.score?.toNumber() || null
-      })),
-      nis2Status: {
-        isCompliant: supplier.nis2Compliant,
-        progress: Math.round((completedAssessmentsCount / requiredAssessments) * 100),
-        requiredAssessments,
-        completedAssessments: completedAssessmentsCount
+        score: sub.score?.toNumber() || null,
+        stage: sub.assessment.stage
+      }));
+
+    const recentDocuments = documents
+      .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
+      .slice(0, 5)
+      .map(doc => {
+        let daysUntilExpiryDoc = null;
+        if (doc.expiryDate) {
+          const diffTime = new Date(doc.expiryDate).getTime() - today.getTime();
+          daysUntilExpiryDoc = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+        }
+        return {
+          id: doc.id,
+          name: doc.name,
+          type: doc.type,
+          category: doc.category || 'UNCATEGORIZED',
+          status: doc.status,
+          uploadedAt: doc.createdAt,
+          expiryDate: doc.expiryDate,
+          daysUntilExpiry: daysUntilExpiryDoc
+        };
+      });
+
+    const recentProblems = problems
+      .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
+      .slice(0, 5)
+      .map(problem => ({
+        id: problem.id,
+        title: problem.title,
+        type: problem.type,
+        priority: problem.priority,
+        status: problem.status,
+        reportedAt: problem.createdAt,
+        dueDate: problem.dueDate
+      }));
+
+    // ========== ALERTS ==========
+    const alerts = {
+      contractExpiringSoon: isExpiringSoon && !isExpired,
+      assessmentDueSoon: daysUntilNextAssessment !== null && daysUntilNextAssessment > 0 && daysUntilNextAssessment <= 7,
+      assessmentOverdue: isAssessmentOverdue,
+      documentsExpiringSoon: documentStats.expiringSoonDocuments,
+      documentsExpired: documentStats.expiredDocuments,
+      highPriorityProblems: highPriorityProblems.length,
+      unreadNotifications
+    };
+
+    // ========== UPCOMING EVENTS ==========
+    const upcomingEvents: Array<{
+      type: 'CONTRACT_EXPIRY' | 'ASSESSMENT_DUE' | 'DOCUMENT_EXPIRY' | 'PROBLEM_DUE';
+      title: string;
+      date: Date;
+      daysUntil: number;
+      priority: 'HIGH' | 'MEDIUM' | 'LOW';
+    }> = [];
+
+    // Add contract expiry if applicable
+    if (contractEndDate && !isExpired) {
+      const days = daysUntilExpiry!;
+      upcomingEvents.push({
+        type: 'CONTRACT_EXPIRY',
+        title: 'Contract Expiry',
+        date: contractEndDate,
+        daysUntil: days,
+        priority: days <= 7 ? 'HIGH' : days <= 30 ? 'MEDIUM' : 'LOW'
+      });
+    }
+
+    // Add next assessment due
+    if (nextAssessmentDue) {
+      const days = daysUntilNextAssessment!;
+      upcomingEvents.push({
+        type: 'ASSESSMENT_DUE',
+        title: 'Next Assessment Due',
+        date: nextAssessmentDue,
+        daysUntil: Math.abs(days),
+        priority: days < 0 ? 'HIGH' : days <= 7 ? 'MEDIUM' : 'LOW'
+      });
+    }
+
+    // Add document expiries in next 30 days
+    const expiringDocuments = documents.filter(doc => {
+      if (!doc.expiryDate) return false;
+      const expiryDate = new Date(doc.expiryDate);
+      return expiryDate > today && expiryDate <= thirtyDaysFromNow;
+    });
+
+    expiringDocuments.forEach(doc => {
+      const expiryDate = new Date(doc.expiryDate!);
+      const days = Math.ceil((expiryDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+      upcomingEvents.push({
+        type: 'DOCUMENT_EXPIRY',
+        title: `${doc.name} Expiry`,
+        date: expiryDate,
+        daysUntil: days,
+        priority: days <= 7 ? 'HIGH' : 'MEDIUM'
+      });
+    });
+
+    // Add problem due dates
+    const problemsWithDueDates = problems.filter(p => p.dueDate && p.status !== 'RESOLVED');
+    problemsWithDueDates.forEach(problem => {
+      const dueDate = new Date(problem.dueDate!);
+      const days = Math.ceil((dueDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+      if (days <= 30) {
+        upcomingEvents.push({
+          type: 'PROBLEM_DUE',
+          title: `Problem Due: ${problem.title}`,
+          date: dueDate,
+          daysUntil: days,
+          priority: problem.priority === 'URGENT' || problem.priority === 'HIGH' ? 'HIGH' : 
+                   days <= 3 ? 'HIGH' : days <= 7 ? 'MEDIUM' : 'LOW'
+        });
       }
+    });
+
+    // Sort upcoming events by date
+    upcomingEvents.sort((a, b) => a.daysUntil - b.daysUntil);
+
+    // ========== PERFORMANCE TREND ==========
+    // Calculate improvement trend based on last 3 assessments
+    const lastThreeAssessments = completedAssessments
+      .sort((a, b) => (b.submittedAt || b.createdAt).getTime() - (a.submittedAt || a.createdAt).getTime())
+      .slice(0, 3);
+
+    let improvementTrend: 'IMPROVING' | 'DECLINING' | 'STABLE' = 'STABLE';
+    
+    if (lastThreeAssessments.length >= 2) {
+      const scores = lastThreeAssessments.map(sub => sub.score?.toNumber() || 0);
+      if (scores[0] > scores[scores.length - 1]) {
+        improvementTrend = 'IMPROVING';
+      } else if (scores[0] < scores[scores.length - 1]) {
+        improvementTrend = 'DECLINING';
+      }
+    }
+
+    // ========== RETURN COMPREHENSIVE STATS ==========
+    return {
+      supplierInfo: {
+        id: supplier.id,
+        name: supplier.name,
+        email: supplier.email,
+        contactPerson: supplier.contactPerson,
+        phone: supplier.phone,
+        category: supplier.category,
+        criticality: supplier.criticality,
+        status: supplier.isActive ? 'ACTIVE' : 'INACTIVE',
+        isActive: supplier.isActive,
+        nis2Compliant: false
+      },
+      
+      contractInfo: {
+        contractStartDate: supplier.contractStartDate,
+        contractEndDate: supplier.contractEndDate,
+        contractDocument: supplier.contractDocument,
+        documentType: supplier.documentType,
+        daysUntilExpiry,
+        isExpired,
+        isExpiringSoon
+      },
+      
+      assessmentStats: {
+        totalAssessments: allAssessments.length,
+        pendingAssessments: pendingAssessments.length,
+        completedAssessments: completedAssessments.length,
+      },
+      
+      riskStats: {
+        riskLevel: supplier.riskLevel,
+        bivScore: supplier.bivScore?.toNumber() || null,
+        businessScore: supplier.businessScore?.toNumber() || null,
+        integrityScore: supplier.integrityScore?.toNumber() || null,
+        availabilityScore: supplier.availabilityScore?.toNumber() || null,
+        lastAssessmentDate: supplier.lastAssessmentDate,
+        isAssessmentOverdue
+      },
+      
+      performanceStats: {
+        qualityRating: supplier.overallScore?.toNumber() || null,
+        overallScore: supplier.overallScore?.toNumber() || null,
+        improvementTrend
+      },
+      
+      documentStats,
+      
+      problemStats,
+      
+      recentActivity: {
+        submissions: recentSubmissions,
+        documents: recentDocuments,
+        problems: recentProblems
+      },
+      
+      upcomingEvents: upcomingEvents.slice(0, 10) // Limit to top 10 events
     };
   },
 
@@ -119,9 +549,9 @@ export const SupplierService = {
     }
 
     // Check if supplier email already exists
-  const existingSupplier = await prisma.supplier.findUnique({
-  where: { email: payload.email }
-}); 
+    const existingSupplier = await prisma.supplier.findUnique({
+      where: { email: payload.email }
+    });
 
     if (existingSupplier) {
       throw new ApiError(httpStatus.CONFLICT, "Supplier with this email already exists");
@@ -816,6 +1246,44 @@ export const SupplierService = {
     });
 
     return result;
-  }
+  },
+  async getSupplierContractStatus(supplierId: string) {
+    const today = new Date();
+    const expiringSoonDate = new Date();
+    expiringSoonDate.setDate(today.getDate() + 30);
 
+    const supplier = await prisma.supplier.findUnique({
+      where: { id: supplierId },
+    });
+
+    if (!supplier) {
+      throw new ApiError(httpStatus.NOT_FOUND, "Supplier not found");
+    }
+
+    let status: 'EXPIRED' | 'EXPIRING_SOON' | 'ACTIVE' = 'ACTIVE';
+
+    if (supplier.contractEndDate) {
+      if (supplier.contractEndDate < today) status = 'EXPIRED';
+      else if (supplier.contractEndDate <= expiringSoonDate) status = 'EXPIRING_SOON';
+    }
+
+    const daysLeft = supplier.contractEndDate
+      ? Math.ceil((supplier.contractEndDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24))
+      : null;
+
+    return {
+      supplierId: supplier.id,
+      name: supplier.name,
+      contactPerson: supplier.contactPerson,
+      email: supplier.email,
+      phone: supplier.phone,
+      category: supplier.category,
+      criticality: supplier.criticality,
+      contractStartDate: supplier.contractStartDate,
+      contractEndDate: supplier.contractEndDate,
+      daysLeft,
+      contractStatus: status,
+      isActive: supplier.isActive,
+    };
+  }
 };

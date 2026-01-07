@@ -740,6 +740,7 @@ exports.PaymentService = {
                 });
                 // Create plan usage record for trial
                 const features = (0, getFeatures_1.getPlanFeatures)(plan);
+                console.log("Free Plan features", features);
                 const isEnterprisePlan = plan.type === "ENTERPRISE";
                 yield prisma_1.prisma.planLimitData.create({
                     data: {

@@ -5,6 +5,7 @@ import { createNotificationSchema, markAsReadSchema } from "./notification.const
 import auth from "../../middlewares/auth";
 import validateRequest from "../../middlewares/validateRequest";
 import { UserRole } from "@prisma/client";
+import { checkUsage } from "../../middlewares/planLimitMiddleware";
 
 const router = express.Router();
 
@@ -53,6 +54,8 @@ router.delete(
 router.post(
   "/create",
   auth("ADMIN", "VENDOR", "SUPPLIER"),
+  checkUsage('notificationsSend', 1),
+
   NotificationController.createNotification
 );
 router.get(
