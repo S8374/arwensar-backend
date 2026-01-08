@@ -31,7 +31,8 @@ export const UserService = {
             vendor: {
               select: {
                 id: true,
-                companyName: true
+                companyName: true,
+                industryType : true,
               }
             }
           }
@@ -62,65 +63,57 @@ export const UserService = {
   },
 
   // ========== UPDATE USER PROFILE ==========
-  async updateUserProfile(userId: string, data: any): Promise<User> {
-    const user = await prisma.user.findUnique({
-      where: { id: userId },
-      include: { vendorProfile: true }
-    });
+ async updateUserProfile(userId: string, data: any) {
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    include: {
+      vendorProfile: true,
+      supplierProfile: true,
+    },
+  });
 
-    console.log("User found to profile update", user);
+  if (!user) throw new ApiError(404, "User not found");
 
-    if (!user) {
-      throw new ApiError(httpStatus.NOT_FOUND, "User not found");
-    }
+  const updateData: any = {};
 
-    const updateData: any = {};
+  // ===== USER TABLE =====
+  if (data.profileImage) updateData.profileImage = data.profileImage;
+  if (data.contactNumber) updateData.phoneNumber = data.contactNumber;
 
-    // ========== USER TABLE UPDATES ==========
-    if (data.profileImage) {
-      updateData.profileImage = data.profileImage;
-    }
-
-    if (data.phoneNumber || data.contactNumber) {
-      updateData.phoneNumber = data.phoneNumber ?? data.contactNumber;
-    }
-
-    // ========== VENDOR PROFILE UPDATES ==========
-    if (user.role === "VENDOR" && user.vendorId) {
-      updateData.vendorProfile = {
-        update: {
-          ...(data.firstName && { firstName: data.firstName }),
-          ...(data.lastName && { lastName: data.lastName }),
-          ...(data.companyName && { companyName: data.companyName }),
-          ...(data.contactNumber && { contactNumber: data.contactNumber }),
-          ...(data.industryType && { industryType: data.industryType }),
-        },
-      };
-    }
-
-    const updatedUser = await prisma.user.update({
-      where: { id: userId },
-      data: updateData,
-      include: {
-        vendorProfile: true,
-        supplierProfile: true,
+  // ===== VENDOR =====
+  if (user.role === "VENDOR") {
+    updateData.vendorProfile = {
+      update: {
+        ...(data.firstName && { firstName: data.firstName }),
+        ...(data.lastName && { lastName: data.lastName }),
+        ...(data.companyName && { companyName: data.companyName }),
+        ...(data.contactNumber && { contactNumber: data.contactNumber }),
+        ...(data.industryType && { industryType: data.industryType }),
+        ...(data.companyLogo && { companyLogo: data.companyLogo }),
       },
-    });
-
-    console.log("Updated user", updatedUser);
-
-    await prisma.activityLog.create({
-      data: {
-        userId,
-        action: "UPDATE_PROFILE",
-        entityType: "USER",
-        entityId: userId,
-        details: { updatedFields: Object.keys(data) },
-      },
-    });
-
-    return updatedUser;
+    };
   }
+
+  // ===== SUPPLIER =====
+  if (user.role === "SUPPLIER") {
+    updateData.supplierProfile = {
+      update: {
+        ...(data.firstName && { contactPerson: data.firstName }),
+        ...(data.contactNumber && { phone: data.contactNumber }),
+      },
+    };
+  }
+
+  return prisma.user.update({
+    where: { id: userId },
+    data: updateData,
+    include: {
+      vendorProfile: true,
+      supplierProfile: true,
+    },
+  });
+}
+
   ,
 
   // ========== UPDATE PASSWORD ==========

@@ -1,5 +1,5 @@
 // src/modules/assessment/assessment.service.ts
-import { Assessment, AssessmentSubmission, AssessmentAnswer, EvidenceStatus, Criticality } from "@prisma/client";
+import { Assessment, AssessmentSubmission, AssessmentAnswer, EvidenceStatus, Criticality, Prisma } from "@prisma/client";
 import { prisma } from "../../shared/prisma";
 import httpStatus from "http-status";
 import { NotificationService } from "../notification/notification.service";
@@ -609,21 +609,82 @@ export const AssessmentService = {
 
     // Calculate score
     let score = 0;
-    switch (data.answer) {
-      case "YES":
-        score = question.maxScore;
-        break;
-      case "PARTIAL":
-        score = question.maxScore * 0.5;
-        break;
-      case "NO":
-        score = 0;
-        break;
-      case "NOT_APPLICABLE":
-      case "NA":
-        score = question.maxScore;
-        break;
+    console.log("Data answer .........................", data);
+    // Check if the user actually provided the answer, comments, and evidence
+    const Answer = data.answer;
+
+    const hasComment = Boolean(data.comments && data.comments.trim());
+    const hasEvidence = Boolean(data.evidence && data.evidence.trim());
+
+    console.log(".................", Answer, hasComment, hasEvidence);
+
+    if (Answer === "YES" && hasComment && hasEvidence) {
+      score = question.maxScore;
     }
+    else if (Answer === "YES" && !hasComment && hasEvidence) {
+      score = question.maxScore * 0.8;
+
+    }
+    else if (Answer === "YES" && hasComment && !hasEvidence) {
+      score = question.maxScore * 0.6;
+    }
+    else if (Answer === "YES" && !hasComment && !hasEvidence) {
+      score = question.maxScore * 0.5;
+    }
+    else if (Answer === "PARTIAL" && hasComment && hasEvidence) {
+      score = question.maxScore * 0.8;
+    }
+    else if (Answer === "PARTIAL" && !hasComment && hasEvidence) {
+      score = question.maxScore * 0.8;
+
+    }
+    else if (Answer === "PARTIAL" && hasComment && !hasEvidence) {
+      score = question.maxScore * 0.6;
+    }
+    else if (Answer === "PARTIAL" && !hasComment && !hasEvidence) {
+      score = question.maxScore * 0.5;
+    }
+    // no
+
+    else if (Answer === "NO" && hasComment && hasEvidence) {
+      score = question.maxScore * 0.6;
+    }
+    else if (Answer === "NO" && !hasComment && hasEvidence) {
+      score = question.maxScore * 0.5;
+
+    }
+    else if (Answer === "NO" && hasComment && !hasEvidence) {
+      score = question.maxScore * 0.3;
+    }
+    else if (Answer === "NO" && !hasComment && !hasEvidence) {
+      score = question.maxScore * 0.2;
+    }
+    else if (Answer === "NOT_APPLICABLE" && !hasComment && hasEvidence) {
+      score = question.maxScore * 0.5;
+
+    }
+    else if (Answer === "NOT_APPLICABLE" && hasComment && !hasEvidence) {
+      score = question.maxScore * 0.3;
+    }
+ 
+    console.log("Questions Secore singel", score);
+
+    // switch (data.answer) {
+
+    //   case "YES":
+    //     score = question.maxScore;
+    //     break;
+    //   case "PARTIAL":
+    //     score = question.maxScore * 0.5;
+    //     break;
+    //   case "NO":
+    //     score = question.maxScore * 0.8;
+    //     break;
+    //   case "NOT_APPLICABLE":
+    //   case "NA":
+    //     score = question.maxScore;
+    //     break;
+    // }
 
     const answerData: any = {
       answer: data.answer,
@@ -632,7 +693,7 @@ export const AssessmentService = {
       comments: data.comments || null,
     };
 
-    // Handle evidence
+  
     if (data.evidence) {
       answerData.evidence = data.evidence;
       if (question.evidenceRequired) {
@@ -675,191 +736,191 @@ export const AssessmentService = {
     return answer;
   },
 
- // ========== SUBMIT ASSESSMENT ==========
-async submitAssessment(
-  submissionId: string,
-  userId: string,
-  data?: any
-): Promise<AssessmentSubmission> {
-  const submittableStatuses: ("DRAFT" | "REJECTED" | "REQUIRES_ACTION")[] = [
-    "DRAFT",
-    "REJECTED",
-    "REQUIRES_ACTION",
-  ];
+  // ========== SUBMIT ASSESSMENT ==========
+  async submitAssessment(
+    submissionId: string,
+    userId: string,
+    data?: any
+  ): Promise<AssessmentSubmission> {
+    const submittableStatuses: ("DRAFT" | "REJECTED" | "REQUIRES_ACTION")[] = [
+      "DRAFT",
+      "REJECTED",
+      "REQUIRES_ACTION",
+    ];
 
-  const submission = await prisma.assessmentSubmission.findFirst({
-    where: {
-      id: submissionId,
-      userId,
-      status: { in: submittableStatuses },
-    },
-    include: {
-      assessment: true,
-      answers: {
-        include: {
-          question: true,
-        },
+    const submission = await prisma.assessmentSubmission.findFirst({
+      where: {
+        id: submissionId,
+        userId,
+        status: { in: submittableStatuses },
       },
-    },
-  });
-
-  if (!submission) {
-    throw new ApiError(
-      httpStatus.BAD_REQUEST,
-      "Submission not found or not submittable. It may be under review or already approved."
-    );
-  }
-
-  // Validate all questions are answered
-  if (submission.answeredQuestions < submission.totalQuestions) {
-    throw new ApiError(
-      httpStatus.BAD_REQUEST,
-      `Please answer all ${submission.totalQuestions} questions. Currently answered: ${submission.answeredQuestions}.`
-    );
-  }
-
-  // Recalculate BIV scores
-  const bivScores = this.calculateBIVScores(submission.answers);
-
-  // === CALCULATE OVERALL SCORE ===
-  let totalScore = 0;
-  let totalMaxScore = 0;
-
-  submission.answers.forEach((ans) => {
-    if (ans.score !== null && ans.score !== undefined && ans.maxScore > 0) {
-      totalScore += ans.score.toNumber();
-      totalMaxScore += ans.maxScore;
-    }
-  });
-
-  const overallScore = totalMaxScore > 0 ? (totalScore / totalMaxScore) * 100 : 0;
-
-  // Determine risk score (numeric for sorting/ranking)
-  const riskScore = bivScores.riskLevel === "HIGH" ? 3 : bivScores.riskLevel === "MEDIUM" ? 2 : 1;
-
-  const result = await prisma.$transaction(async (tx) => {
-    // Update submission with calculated scores
-    const updatedSubmission = await tx.assessmentSubmission.update({
-      where: { id: submissionId },
-      data: {
-        status: "PENDING",
-        submittedAt: new Date(),
-        score: overallScore, // ← This is the overall percentage
-        businessScore: bivScores.businessScore,
-        integrityScore: bivScores.integrityScore,
-        availabilityScore: bivScores.availabilityScore,
-        bivScore: bivScores.bivScore,
-        riskLevel: bivScores.riskLevel,
-        riskBreakdown: bivScores.breakdown,
-        riskScore,
-        // Clear previous review data on re-submission
-        reviewedAt: null,
-        reviewedBy: null,
-        reviewComments: null,
-        reviewerReport: null,
+      include: {
+        assessment: true,
+        answers: {
+          include: {
+            question: true,
+          },
+        },
       },
     });
 
-    // === UPDATE SUPPLIER WITH ALL SCORES INCLUDING OVERALLSCORE ===
-    if (submission.supplierId) {
-      await tx.supplier.update({
-        where: { id: submission.supplierId },
+    if (!submission) {
+      throw new ApiError(
+        httpStatus.BAD_REQUEST,
+        "Submission not found or not submittable. It may be under review or already approved."
+      );
+    }
+
+    // Validate all questions are answered
+    if (submission.answeredQuestions < submission.totalQuestions) {
+      throw new ApiError(
+        httpStatus.BAD_REQUEST,
+        `Please answer all ${submission.totalQuestions} questions. Currently answered: ${submission.answeredQuestions}.`
+      );
+    }
+
+    // Recalculate BIV scores
+    const bivScores = this.calculateBIVScores(submission.answers);
+
+    // === CALCULATE OVERALL SCORE ===
+    let totalScore = 0;
+    let totalMaxScore = 0;
+
+    submission.answers.forEach((ans) => {
+      if (ans.score !== null && ans.score !== undefined && ans.maxScore > 0) {
+        totalScore += ans.score.toNumber();
+        totalMaxScore += ans.maxScore;
+      }
+    });
+
+    const overallScore = totalMaxScore > 0 ? (totalScore / totalMaxScore) * 100 : 0;
+
+    // Determine risk score (numeric for sorting/ranking)
+    const riskScore = bivScores.riskLevel === "HIGH" ? 3 : bivScores.riskLevel === "MEDIUM" ? 2 : 1;
+
+    const result = await prisma.$transaction(async (tx) => {
+      // Update submission with calculated scores
+      const updatedSubmission = await tx.assessmentSubmission.update({
+        where: { id: submissionId },
         data: {
-          // NOW INCLUDING overallScore!
-          overallScore: overallScore,
-          bivScore: bivScores.bivScore,
+          status: "PENDING",
+          submittedAt: new Date(),
+          score: overallScore, // ← This is the overall percentage
           businessScore: bivScores.businessScore,
           integrityScore: bivScores.integrityScore,
           availabilityScore: bivScores.availabilityScore,
+          bivScore: bivScores.bivScore,
           riskLevel: bivScores.riskLevel,
-          lastAssessmentDate: new Date(),
-          nis2Compliant: bivScores.bivScore >= 71, // optional: update on submit
+          riskBreakdown: bivScores.breakdown,
+          riskScore,
+          // Clear previous review data on re-submission
+          reviewedAt: null,
+          reviewedBy: null,
+          reviewComments: null,
+          reviewerReport: null,
         },
       });
-    }
 
-    // Notify vendor
-    if (submission.vendorId) {
-      const vendor = await tx.vendor.findUnique({
-        where: { id: submission.vendorId },
-        select: { userId: true, companyName: true },
-      });
-
-      if (vendor?.userId) {
-        await NotificationService.createNotification({
-          userId: vendor.userId,
-          title: "New Assessment Submitted",
-          message: `Supplier has submitted assessment: "${submission.assessment.title}"`,
-          type: "ASSESSMENT_SUBMITTED",
-          metadata: {
-            submissionId: submission.id,
-            assessmentId: submission.assessmentId,
-            supplierId: submission.supplierId,
-            overallScore: overallScore.toFixed(1),
+      // === UPDATE SUPPLIER WITH ALL SCORES INCLUDING OVERALLSCORE ===
+      if (submission.supplierId) {
+        await tx.supplier.update({
+          where: { id: submission.supplierId },
+          data: {
+            // NOW INCLUDING overallScore!
+            overallScore: overallScore,
+            bivScore: bivScores.bivScore,
+            businessScore: bivScores.businessScore,
+            integrityScore: bivScores.integrityScore,
+            availabilityScore: bivScores.availabilityScore,
             riskLevel: bivScores.riskLevel,
-            isResubmission: submission.status !== "DRAFT",
+            lastAssessmentDate: new Date(),
+            nis2Compliant: bivScores.bivScore >= 71, // optional: update on submit
           },
         });
-
-        // // Send email to vendor
-        // try {
-        //   const vendorUser = await tx.user.findUnique({
-        //     where: { id: vendor.userId },
-        //     select: { email: true },
-        //   });
-
-        //   if (vendorUser?.email) {
-        //     await mailtrapService.sendHtmlEmail({
-        //       to: vendorUser.email,
-        //       subject: `New Assessment Submission: ${submission.assessment.title}`,
-        //       html: `
-        //         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
-        //           <h2>New Assessment Submitted</h2>
-        //           <p>Hello${vendorUser.email },</p>
-        //           <p>A supplier has submitted responses for review.</p>
-
-        //           <div style="background:#f8f9fa;padding:20px;border-radius:8px;margin:20px 0;">
-        //             <p><strong>Assessment:</strong> ${submission.assessment.title}</p>
-        //             <p><strong>Overall Score:</strong> ${overallScore.toFixed(1)}%</p>
-        //             <p><strong>Risk Level:</strong> 
-        //               <span style="padding:4px 8px;border-radius:4px;font-weight:bold;
-        //                 background:${bivScores.riskLevel === 'HIGH' ? '#fee2e2;color:#dc2626' : 
-        //                               bivScores.riskLevel === 'MEDIUM' ? '#fef3c7;color:#d97706' : 
-        //                               '#d1fae5;color:#059669'}">
-        //                 ${bivScores.riskLevel}
-        //               </span>
-        //             </p>
-        //           </div>
-
-        //           <p>Please review the submission at your earliest convenience.</p>
-
-        //           <div style="text-align:center;margin:30px 0;">
-        //             <a href="${process.env.FRONTEND_URL}/vendor/assessments/submissions/${submissionId}"
-        //                style="background:#007bff;color:white;padding:14px 28px;text-decoration:none;border-radius:6px;font-weight:bold;display:inline-block;">
-        //               Review Submission Now
-        //             </a>
-        //           </div>
-
-        //           <hr style="border:none;border-top:1px solid #eee;margin:30px 0;">
-        //           <p style="color:#666;font-size:12px;text-align:center;">
-        //             © ${new Date().getFullYear()} CyberNark. All rights reserved.
-        //           </p>
-        //         </div>
-        //       `,
-        //     });
-        //   }
-        // } catch (error) {
-        //   console.error("Failed to send submission notification email:", error);
-        //   // Don't fail transaction due to email
-        // }
       }
-    }
 
-    return updatedSubmission;
-  });
+      // Notify vendor
+      if (submission.vendorId) {
+        const vendor = await tx.vendor.findUnique({
+          where: { id: submission.vendorId },
+          select: { userId: true, companyName: true },
+        });
 
-  return result;
-},
+        if (vendor?.userId) {
+          await NotificationService.createNotification({
+            userId: vendor.userId,
+            title: "New Assessment Submitted",
+            message: `Supplier has submitted assessment: "${submission.assessment.title}"`,
+            type: "ASSESSMENT_SUBMITTED",
+            metadata: {
+              submissionId: submission.id,
+              assessmentId: submission.assessmentId,
+              supplierId: submission.supplierId,
+              overallScore: overallScore.toFixed(1),
+              riskLevel: bivScores.riskLevel,
+              isResubmission: submission.status !== "DRAFT",
+            },
+          });
+
+          // // Send email to vendor
+          // try {
+          //   const vendorUser = await tx.user.findUnique({
+          //     where: { id: vendor.userId },
+          //     select: { email: true },
+          //   });
+
+          //   if (vendorUser?.email) {
+          //     await mailtrapService.sendHtmlEmail({
+          //       to: vendorUser.email,
+          //       subject: `New Assessment Submission: ${submission.assessment.title}`,
+          //       html: `
+          //         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+          //           <h2>New Assessment Submitted</h2>
+          //           <p>Hello${vendorUser.email },</p>
+          //           <p>A supplier has submitted responses for review.</p>
+
+          //           <div style="background:#f8f9fa;padding:20px;border-radius:8px;margin:20px 0;">
+          //             <p><strong>Assessment:</strong> ${submission.assessment.title}</p>
+          //             <p><strong>Overall Score:</strong> ${overallScore.toFixed(1)}%</p>
+          //             <p><strong>Risk Level:</strong> 
+          //               <span style="padding:4px 8px;border-radius:4px;font-weight:bold;
+          //                 background:${bivScores.riskLevel === 'HIGH' ? '#fee2e2;color:#dc2626' : 
+          //                               bivScores.riskLevel === 'MEDIUM' ? '#fef3c7;color:#d97706' : 
+          //                               '#d1fae5;color:#059669'}">
+          //                 ${bivScores.riskLevel}
+          //               </span>
+          //             </p>
+          //           </div>
+
+          //           <p>Please review the submission at your earliest convenience.</p>
+
+          //           <div style="text-align:center;margin:30px 0;">
+          //             <a href="${process.env.FRONTEND_URL}/vendor/assessments/submissions/${submissionId}"
+          //                style="background:#007bff;color:white;padding:14px 28px;text-decoration:none;border-radius:6px;font-weight:bold;display:inline-block;">
+          //               Review Submission Now
+          //             </a>
+          //           </div>
+
+          //           <hr style="border:none;border-top:1px solid #eee;margin:30px 0;">
+          //           <p style="color:#666;font-size:12px;text-align:center;">
+          //             © ${new Date().getFullYear()} CyberNark. All rights reserved.
+          //           </p>
+          //         </div>
+          //       `,
+          //     });
+          //   }
+          // } catch (error) {
+          //   console.error("Failed to send submission notification email:", error);
+          //   // Don't fail transaction due to email
+          // }
+        }
+      }
+
+      return updatedSubmission;
+    });
+
+    return result;
+  },
 
 
   // ========== CALCULATE RISK SCORE ==========
@@ -950,7 +1011,7 @@ async submitAssessment(
   //         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
   //           <h2 style="color: #333;">Assessment Submitted</h2>
   //           <p>${supplier?.name || 'A supplier'} has submitted an assessment for your review.</p>
-            
+
   //           <div style="background-color: #f8f9fa; padding: 20px; border-radius: 5px; margin: 20px 0;">
   //             <h3 style="margin-top: 0;">Assessment Details:</h3>
   //             <p><strong>Assessment:</strong> ${submission.assessment.title}</p>
@@ -962,21 +1023,21 @@ async submitAssessment(
   //         }">${result.bivResult.riskLevel}</span></p>
   //             <p><strong>Submitted At:</strong> ${new Date().toLocaleString()}</p>
   //           </div>
-            
+
   //           <p>BIV Breakdown:</p>
   //           <ul>
   //             <li><strong>Business:</strong> ${result.bivResult.breakdown.business.toFixed(1)}%</li>
   //             <li><strong>Integrity:</strong> ${result.bivResult.breakdown.integrity.toFixed(1)}%</li>
   //             <li><strong>Availability:</strong> ${result.bivResult.breakdown.availability.toFixed(1)}%</li>
   //           </ul>
-            
+
   //           <div style="text-align: center; margin: 30px 0;">
   //             <a href="${process.env.FRONTEND_URL}/vendor/assessments/submissions/${submission.id}" 
   //                style="background-color: #007bff; color: white; padding: 12px 30px; text-decoration: none; border-radius: 5px; font-weight: bold;">
   //               Review Assessment
   //             </a>
   //           </div>
-            
+
   //           <hr style="border: none; border-top: 1px solid #eee; margin: 20px 0;">
   //           <p style="color: #666; font-size: 12px;">© ${new Date().getFullYear()} CyberNark. All rights reserved.</p>
   //         </div>
@@ -1569,59 +1630,55 @@ async submitAssessment(
     };
   }
   ,
-  // src/modules/assessment/assessment.service.ts (add this method)
-  async removeEvidence(
-    answerId: string,
-    userId: string
-  ): Promise<AssessmentAnswer> {
-    const answer = await prisma.assessmentAnswer.findFirst({
-      where: { id: answerId },
-      include: {
-        submission: {
-          include: {
-            user: {
-              select: { id: true }
-            }
-          }
+async removeEvidence(
+  answerId: string,
+  userId: string
+): Promise<Prisma.BatchPayload> {
+  const answer = await prisma.assessmentAnswer.findFirst({
+    where: { questionId: answerId },
+    include: {
+      submission: {
+        include: {
+          user: { select: { id: true } }
         }
       }
-    });
-
-    if (!answer) {
-      throw new ApiError(httpStatus.NOT_FOUND, "Answer not found");
     }
+  });
 
-    // Check permissions
-    const user = await prisma.user.findUnique({
-      where: { id: userId },
-      select: { role: true, vendorId: true, supplierId: true }
-    });
+  if (!answer) {
+    throw new ApiError(httpStatus.NOT_FOUND, "Answer not found");
+  }
 
-    if (!user) {
-      throw new ApiError(httpStatus.NOT_FOUND, "User not found");
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { role: true, vendorId: true, supplierId: true }
+  });
+
+  if (!user) {
+    throw new ApiError(httpStatus.NOT_FOUND, "User not found");
+  }
+
+  const canRemove =
+    answer.submission.user.id === userId ||
+    (user.role === 'VENDOR' && answer.submission.vendorId === user.vendorId) ||
+    user.role === 'ADMIN';
+
+  if (!canRemove) {
+    throw new ApiError(httpStatus.FORBIDDEN, "You don't have permission to remove this evidence");
+  }
+
+  // Update using updateMany
+  const updated = await prisma.assessmentAnswer.updateMany({
+    where: { id: answerId },
+    data: {
+      evidence: null,
+      evidenceStatus: 'PENDING'
     }
+  });
 
-    const canRemove =
-      answer.submission.user.id === userId ||
-      (user.role === 'VENDOR' && answer.submission.vendorId === user.vendorId) ||
-      user.role === 'ADMIN';
-
-    if (!canRemove) {
-      throw new ApiError(httpStatus.FORBIDDEN, "You don't have permission to remove this evidence");
-    }
-
-    // Simply update the database without Cloudinary deletion
-    const updatedAnswer = await prisma.assessmentAnswer.update({
-      where: { id: answerId },
-      data: {
-        evidence: null,
-        evidenceStatus: 'PENDING'
-      }
-    });
-
-
-    return updatedAnswer;
-  },
+  return updated; // BatchPayload { count: number }
+}
+,
   // ========== GET SUBMISSIONS BY USER ID ==========
   async getSubmissionsByUserId(
     userId: string,

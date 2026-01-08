@@ -26,7 +26,7 @@ export interface SupplierDashboardStats {
     nis2Compliant: boolean;
     avatar?: string;
   };
-  
+
   // Contract information
   contractInfo: {
     contractStartDate: Date;
@@ -37,14 +37,14 @@ export interface SupplierDashboardStats {
     isExpired: boolean;
     isExpiringSoon: boolean;
   };
-  
+
   // Assessment statistics
   assessmentStats: {
     totalAssessments: number;
     pendingAssessments: number;
-    completedAssessments: number;   
+    completedAssessments: number;
   };
-  
+
   // Risk & Compliance
   riskStats: {
     riskLevel: Criticality | null;
@@ -55,14 +55,14 @@ export interface SupplierDashboardStats {
     lastAssessmentDate: Date | null;
     isAssessmentOverdue: boolean;
   };
-  
+
   // Performance metrics
   performanceStats: {
     qualityRating: number | null;
     overallScore: number | null;
     improvementTrend: 'IMPROVING' | 'DECLINING' | 'STABLE';
   };
-  
+
   // Document statistics
   documentStats: {
     totalDocuments: number;
@@ -74,7 +74,7 @@ export interface SupplierDashboardStats {
     byCategory: Record<string, number>;
     byType: Record<string, number>;
   };
-  
+
   // Problem statistics
   problemStats: {
     totalProblems: number;
@@ -85,7 +85,17 @@ export interface SupplierDashboardStats {
     slaBreaches: number;
     byType: Record<string, number>;
   };
-  
+myVendor: {
+  id: string;
+  companyName: string;
+  email: string;                // ✅ normalized
+  contactNumber: string;
+  industryType: string;
+  companyLogo?: string | null;
+  isActive: boolean;
+} | null;
+
+
   // Recent activity
   recentActivity: {
     submissions: Array<{
@@ -117,7 +127,7 @@ export interface SupplierDashboardStats {
     }>;
   };
 
-  
+
   // Timeline for next 30 days
   upcomingEvents: Array<{
     type: 'CONTRACT_EXPIRY' | 'ASSESSMENT_DUE' | 'DOCUMENT_EXPIRY' | 'PROBLEM_DUE';
@@ -130,7 +140,7 @@ export interface SupplierDashboardStats {
 
 export const SupplierService = {
   // ========== DASHBOARD ==========
-async getDashboardStats(supplierId: string): Promise<SupplierDashboardStats> {
+  async getDashboardStats(supplierId: string): Promise<SupplierDashboardStats> {
     const supplier = await prisma.supplier.findUnique({
       where: { id: supplierId },
       include: {
@@ -140,7 +150,18 @@ async getDashboardStats(supplierId: string): Promise<SupplierDashboardStats> {
             email: true,
             status: true,
             lastLoginAt: true,
-            profileImage: true
+            profileImage: true,
+            vendorProfile: {
+              select: {
+                id: true,
+                companyName: true,
+                businessEmail: true,
+                contactNumber: true,
+                industryType: true,
+                companyLogo: true,
+                isActive: true
+              }
+            }
           }
         },
         vendor: {
@@ -148,7 +169,10 @@ async getDashboardStats(supplierId: string): Promise<SupplierDashboardStats> {
             id: true,
             companyName: true,
             contactNumber: true,
-            businessEmail: true
+            businessEmail: true,
+            industryType: true,   // ✅ ADD
+        companyLogo: true,    // ✅ ADD
+        isActive: true        // ✅ ADD
           }
         },
         assessmentSubmissions: {
@@ -224,7 +248,7 @@ async getDashboardStats(supplierId: string): Promise<SupplierDashboardStats> {
       sub => sub.status === 'APPROVED'
     );
     const pendingAssessments = allAssessments.filter(
-      sub => sub.status === 'PENDING' || sub.status === 'REJECTED' 
+      sub => sub.status === 'PENDING' || sub.status === 'REJECTED'
     );
     const draftAssessments = allAssessments.filter(
       sub => sub.status === 'DRAFT'
@@ -234,8 +258,8 @@ async getDashboardStats(supplierId: string): Promise<SupplierDashboardStats> {
       .map(sub => sub.score?.toNumber() || 0)
       .filter(score => score > 0);
 
-    const averageScore = scores.length > 0 
-      ? scores.reduce((sum, score) => sum + score, 0) / scores.length 
+    const averageScore = scores.length > 0
+      ? scores.reduce((sum, score) => sum + score, 0) / scores.length
       : 0;
 
     // Check for overdue assessments
@@ -286,17 +310,17 @@ async getDashboardStats(supplierId: string): Promise<SupplierDashboardStats> {
     };
 
     // ========== PROBLEM STATS ==========
-    const openProblems = problems.filter(p => 
+    const openProblems = problems.filter(p =>
       p.status === 'OPEN' || p.status === 'IN_PROGRESS'
     );
     const resolvedProblems = problems.filter(p => p.status === 'RESOLVED');
-    const highPriorityProblems = problems.filter(p => 
+    const highPriorityProblems = problems.filter(p =>
       p.priority === 'HIGH' || p.priority === 'URGENT'
     );
-    
+
     let totalResolutionTime = 0;
     let resolvedWithTime = 0;
-    
+
     resolvedProblems.forEach(problem => {
       if (problem.resolvedAt && problem.createdAt) {
         const resolutionTime = problem.resolvedAt.getTime() - problem.createdAt.getTime();
@@ -305,8 +329,8 @@ async getDashboardStats(supplierId: string): Promise<SupplierDashboardStats> {
       }
     });
 
-    const averageResolutionTime = resolvedWithTime > 0 
-      ? totalResolutionTime / resolvedWithTime 
+    const averageResolutionTime = resolvedWithTime > 0
+      ? totalResolutionTime / resolvedWithTime
       : 0;
 
     const problemStats = {
@@ -443,8 +467,8 @@ async getDashboardStats(supplierId: string): Promise<SupplierDashboardStats> {
           title: `Problem Due: ${problem.title}`,
           date: dueDate,
           daysUntil: days,
-          priority: problem.priority === 'URGENT' || problem.priority === 'HIGH' ? 'HIGH' : 
-                   days <= 3 ? 'HIGH' : days <= 7 ? 'MEDIUM' : 'LOW'
+          priority: problem.priority === 'URGENT' || problem.priority === 'HIGH' ? 'HIGH' :
+            days <= 3 ? 'HIGH' : days <= 7 ? 'MEDIUM' : 'LOW'
         });
       }
     });
@@ -459,7 +483,7 @@ async getDashboardStats(supplierId: string): Promise<SupplierDashboardStats> {
       .slice(0, 3);
 
     let improvementTrend: 'IMPROVING' | 'DECLINING' | 'STABLE' = 'STABLE';
-    
+
     if (lastThreeAssessments.length >= 2) {
       const scores = lastThreeAssessments.map(sub => sub.score?.toNumber() || 0);
       if (scores[0] > scores[scores.length - 1]) {
@@ -483,7 +507,32 @@ async getDashboardStats(supplierId: string): Promise<SupplierDashboardStats> {
         isActive: supplier.isActive,
         nis2Compliant: false
       },
-      
+myVendor:
+  supplier.user?.vendorProfile
+    ? {
+        id: supplier.user.vendorProfile.id,
+        companyName: supplier.user.vendorProfile.companyName,
+        email: supplier.user.email, // USER email
+        contactNumber: supplier.user.vendorProfile.contactNumber,
+        industryType: supplier.user.vendorProfile.industryType,
+        companyLogo: supplier.user.vendorProfile.companyLogo,
+        isActive: supplier.user.vendorProfile.isActive
+      }
+    : supplier.vendor
+    ? {
+        id: supplier.vendor.id,
+        companyName: supplier.vendor.companyName,
+        email: supplier.vendor.businessEmail, // fallback
+        contactNumber: supplier.vendor.contactNumber,
+        industryType: supplier.vendor.industryType,
+        companyLogo: supplier.vendor.companyLogo,
+        isActive: supplier.vendor.isActive
+      }
+    : null,
+
+
+
+
       contractInfo: {
         contractStartDate: supplier.contractStartDate,
         contractEndDate: supplier.contractEndDate,
@@ -493,13 +542,13 @@ async getDashboardStats(supplierId: string): Promise<SupplierDashboardStats> {
         isExpired,
         isExpiringSoon
       },
-      
+
       assessmentStats: {
         totalAssessments: allAssessments.length,
         pendingAssessments: pendingAssessments.length,
         completedAssessments: completedAssessments.length,
       },
-      
+
       riskStats: {
         riskLevel: supplier.riskLevel,
         bivScore: supplier.bivScore?.toNumber() || null,
@@ -509,23 +558,23 @@ async getDashboardStats(supplierId: string): Promise<SupplierDashboardStats> {
         lastAssessmentDate: supplier.lastAssessmentDate,
         isAssessmentOverdue
       },
-      
+
       performanceStats: {
         qualityRating: supplier.overallScore?.toNumber() || null,
         overallScore: supplier.overallScore?.toNumber() || null,
         improvementTrend
       },
-      
+
       documentStats,
-      
+
       problemStats,
-      
+
       recentActivity: {
         submissions: recentSubmissions,
         documents: recentDocuments,
         problems: recentProblems
       },
-      
+
       upcomingEvents: upcomingEvents.slice(0, 10) // Limit to top 10 events
     };
   },
