@@ -669,23 +669,6 @@ export const AssessmentService = {
  
     console.log("Questions Secore singel", score);
 
-    // switch (data.answer) {
-
-    //   case "YES":
-    //     score = question.maxScore;
-    //     break;
-    //   case "PARTIAL":
-    //     score = question.maxScore * 0.5;
-    //     break;
-    //   case "NO":
-    //     score = question.maxScore * 0.8;
-    //     break;
-    //   case "NOT_APPLICABLE":
-    //   case "NA":
-    //     score = question.maxScore;
-    //     break;
-    // }
-
     const answerData: any = {
       answer: data.answer,
       score,
@@ -787,13 +770,16 @@ export const AssessmentService = {
     let totalMaxScore = 0;
 
     submission.answers.forEach((ans) => {
+      console.log("His Final Answer",ans);
       if (ans.score !== null && ans.score !== undefined && ans.maxScore > 0) {
         totalScore += ans.score.toNumber();
+        console.log("Total Number ",totalScore );
         totalMaxScore += ans.maxScore;
+        console.log("Total MaxScore",totalMaxScore) ;
       }
     });
 
-    const overallScore = totalMaxScore > 0 ? (totalScore / totalMaxScore) * 100 : 0;
+    const overallScore = totalMaxScore < 0 ? (totalScore / totalMaxScore) * 100 : 0;
 
     // Determine risk score (numeric for sorting/ranking)
     const riskScore = bivScores.riskLevel === "HIGH" ? 3 : bivScores.riskLevel === "MEDIUM" ? 2 : 1;

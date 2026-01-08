@@ -16,7 +16,7 @@ const router = express.Router();
 router.post(
   "/",
   auth("ADMIN", "VENDOR", "SUPPLIER"),
-  checkUsage('reportCreate', 1),
+ checkUsage('reportCreate', 1),
   ProblemController.createProblem
 );
 
@@ -46,7 +46,7 @@ router.patch(
 router.post(
   "/:problemId/messages",
   auth("ADMIN", "VENDOR", "SUPPLIER"),
-  checkUsage('messagesUsed', 1),
+ checkUsage('messagesUsed', 1),
   validateRequest(createMessageSchema),
   ProblemController.createMessage
 );
