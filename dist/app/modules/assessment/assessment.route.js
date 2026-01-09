@@ -10,7 +10,6 @@ const assessment_controller_1 = require("./assessment.controller");
 const assessment_constant_1 = require("./assessment.constant");
 const auth_1 = __importDefault(require("../../middlewares/auth"));
 const validateRequest_1 = __importDefault(require("../../middlewares/validateRequest"));
-const planLimitMiddleware_1 = require("../../middlewares/planLimitMiddleware");
 const router = express_1.default.Router();
 // Get assessments
 router.get("/", (0, auth_1.default)("ADMIN", "VENDOR", "SUPPLIER"), assessment_controller_1.AssessmentController.getAssessments);
@@ -27,7 +26,9 @@ router.post("/submissions/:submissionId/answers/:questionId", (0, auth_1.default
 // Submit assessment
 router.post("/submissions/:submissionId/submit", (0, auth_1.default)("SUPPLIER"), assessment_controller_1.AssessmentController.submitAssessment);
 // Review assessment
-router.post("/submissions/:submissionId/review", (0, auth_1.default)("VENDOR", "ADMIN"), (0, planLimitMiddleware_1.checkUsage)('assessmentsUsed', 1), (0, validateRequest_1.default)(assessment_constant_1.reviewAssessmentSchema), assessment_controller_1.AssessmentController.reviewAssessment);
+router.post("/submissions/:submissionId/review", (0, auth_1.default)("VENDOR", "ADMIN"), 
+//checkUsage('assessmentsUsed', 1), 
+(0, validateRequest_1.default)(assessment_constant_1.reviewAssessmentSchema), assessment_controller_1.AssessmentController.reviewAssessment);
 // Review evidence
 router.post("/evidence/:answerId/review", (0, auth_1.default)("VENDOR", "ADMIN"), (0, validateRequest_1.default)(assessment_constant_1.reviewEvidenceSchema), assessment_controller_1.AssessmentController.reviewEvidence);
 // Request evidence

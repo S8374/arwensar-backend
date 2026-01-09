@@ -666,7 +666,7 @@ export const AssessmentService = {
     else if (Answer === "NOT_APPLICABLE" && hasComment && !hasEvidence) {
       score = question.maxScore * 0.3;
     }
- 
+
     console.log("Questions Secore singel", score);
 
     const answerData: any = {
@@ -676,7 +676,7 @@ export const AssessmentService = {
       comments: data.comments || null,
     };
 
-  
+
     if (data.evidence) {
       answerData.evidence = data.evidence;
       if (question.evidenceRequired) {
@@ -770,17 +770,21 @@ export const AssessmentService = {
     let totalMaxScore = 0;
 
     submission.answers.forEach((ans) => {
-      console.log("His Final Answer",ans);
       if (ans.score !== null && ans.score !== undefined && ans.maxScore > 0) {
         totalScore += ans.score.toNumber();
-        console.log("Total Number ",totalScore );
         totalMaxScore += ans.maxScore;
-        console.log("Total MaxScore",totalMaxScore) ;
       }
     });
 
-    const overallScore = totalMaxScore < 0 ? (totalScore / totalMaxScore) * 100 : 0;
+    // FIXED: Check if totalMaxScore > 0, not < 0
+    const overallScore = totalMaxScore > 0 ? (totalScore / totalMaxScore) * 90 : 0;
 
+    console.log("Final Calculation:", {
+      totalScore,
+      totalMaxScore,
+      overallScore,
+      percentage: overallScore.toFixed(2) + "%"
+    });
     // Determine risk score (numeric for sorting/ranking)
     const riskScore = bivScores.riskLevel === "HIGH" ? 3 : bivScores.riskLevel === "MEDIUM" ? 2 : 1;
 
@@ -848,57 +852,7 @@ export const AssessmentService = {
             },
           });
 
-          // // Send email to vendor
-          // try {
-          //   const vendorUser = await tx.user.findUnique({
-          //     where: { id: vendor.userId },
-          //     select: { email: true },
-          //   });
-
-          //   if (vendorUser?.email) {
-          //     await mailtrapService.sendHtmlEmail({
-          //       to: vendorUser.email,
-          //       subject: `New Assessment Submission: ${submission.assessment.title}`,
-          //       html: `
-          //         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
-          //           <h2>New Assessment Submitted</h2>
-          //           <p>Hello${vendorUser.email },</p>
-          //           <p>A supplier has submitted responses for review.</p>
-
-          //           <div style="background:#f8f9fa;padding:20px;border-radius:8px;margin:20px 0;">
-          //             <p><strong>Assessment:</strong> ${submission.assessment.title}</p>
-          //             <p><strong>Overall Score:</strong> ${overallScore.toFixed(1)}%</p>
-          //             <p><strong>Risk Level:</strong> 
-          //               <span style="padding:4px 8px;border-radius:4px;font-weight:bold;
-          //                 background:${bivScores.riskLevel === 'HIGH' ? '#fee2e2;color:#dc2626' : 
-          //                               bivScores.riskLevel === 'MEDIUM' ? '#fef3c7;color:#d97706' : 
-          //                               '#d1fae5;color:#059669'}">
-          //                 ${bivScores.riskLevel}
-          //               </span>
-          //             </p>
-          //           </div>
-
-          //           <p>Please review the submission at your earliest convenience.</p>
-
-          //           <div style="text-align:center;margin:30px 0;">
-          //             <a href="${process.env.FRONTEND_URL}/vendor/assessments/submissions/${submissionId}"
-          //                style="background:#007bff;color:white;padding:14px 28px;text-decoration:none;border-radius:6px;font-weight:bold;display:inline-block;">
-          //               Review Submission Now
-          //             </a>
-          //           </div>
-
-          //           <hr style="border:none;border-top:1px solid #eee;margin:30px 0;">
-          //           <p style="color:#666;font-size:12px;text-align:center;">
-          //             © ${new Date().getFullYear()} CyberNark. All rights reserved.
-          //           </p>
-          //         </div>
-          //       `,
-          //     });
-          //   }
-          // } catch (error) {
-          //   console.error("Failed to send submission notification email:", error);
-          //   // Don't fail transaction due to email
-          // }
+         
         }
       }
 
@@ -1617,11 +1571,12 @@ export const AssessmentService = {
   }
   ,
 async removeEvidence(
-  answerId: string,
+  questionId: string,
   userId: string
 ): Promise<Prisma.BatchPayload> {
+
   const answer = await prisma.assessmentAnswer.findFirst({
-    where: { questionId: answerId },
+    where: { questionId },
     include: {
       submission: {
         include: {
@@ -1637,7 +1592,7 @@ async removeEvidence(
 
   const user = await prisma.user.findUnique({
     where: { id: userId },
-    select: { role: true, vendorId: true, supplierId: true }
+    select: { role: true, vendorId: true }
   });
 
   if (!user) {
@@ -1646,25 +1601,28 @@ async removeEvidence(
 
   const canRemove =
     answer.submission.user.id === userId ||
-    (user.role === 'VENDOR' && answer.submission.vendorId === user.vendorId) ||
+    (user.role === 'VENDOR' &&
+      answer.submission.vendorId === user.vendorId) ||
     user.role === 'ADMIN';
 
   if (!canRemove) {
-    throw new ApiError(httpStatus.FORBIDDEN, "You don't have permission to remove this evidence");
+    throw new ApiError(
+      httpStatus.FORBIDDEN,
+      "You don't have permission to remove this evidence"
+    );
   }
 
-  // Update using updateMany
-  const updated = await prisma.assessmentAnswer.updateMany({
-    where: { id: answerId },
+  // ✅ CORRECT update
+  return prisma.assessmentAnswer.updateMany({
+    where: { questionId },   // ✅ FIXED
     data: {
       evidence: null,
       evidenceStatus: 'PENDING'
     }
   });
-
-  return updated; // BatchPayload { count: number }
 }
-,
+
+  ,
   // ========== GET SUBMISSIONS BY USER ID ==========
   async getSubmissionsByUserId(
     userId: string,

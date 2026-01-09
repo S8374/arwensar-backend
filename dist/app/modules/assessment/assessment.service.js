@@ -499,28 +499,62 @@ exports.AssessmentService = {
             }
             // Calculate score
             let score = 0;
-            switch (data.answer) {
-                case "YES":
-                    score = question.maxScore;
-                    break;
-                case "PARTIAL":
-                    score = question.maxScore * 0.5;
-                    break;
-                case "NO":
-                    score = 0;
-                    break;
-                case "NOT_APPLICABLE":
-                case "NA":
-                    score = question.maxScore;
-                    break;
+            console.log("Data answer .........................", data);
+            // Check if the user actually provided the answer, comments, and evidence
+            const Answer = data.answer;
+            const hasComment = Boolean(data.comments && data.comments.trim());
+            const hasEvidence = Boolean(data.evidence && data.evidence.trim());
+            console.log(".................", Answer, hasComment, hasEvidence);
+            if (Answer === "YES" && hasComment && hasEvidence) {
+                score = question.maxScore;
             }
+            else if (Answer === "YES" && !hasComment && hasEvidence) {
+                score = question.maxScore * 0.8;
+            }
+            else if (Answer === "YES" && hasComment && !hasEvidence) {
+                score = question.maxScore * 0.6;
+            }
+            else if (Answer === "YES" && !hasComment && !hasEvidence) {
+                score = question.maxScore * 0.5;
+            }
+            else if (Answer === "PARTIAL" && hasComment && hasEvidence) {
+                score = question.maxScore * 0.8;
+            }
+            else if (Answer === "PARTIAL" && !hasComment && hasEvidence) {
+                score = question.maxScore * 0.8;
+            }
+            else if (Answer === "PARTIAL" && hasComment && !hasEvidence) {
+                score = question.maxScore * 0.6;
+            }
+            else if (Answer === "PARTIAL" && !hasComment && !hasEvidence) {
+                score = question.maxScore * 0.5;
+            }
+            // no
+            else if (Answer === "NO" && hasComment && hasEvidence) {
+                score = question.maxScore * 0.6;
+            }
+            else if (Answer === "NO" && !hasComment && hasEvidence) {
+                score = question.maxScore * 0.5;
+            }
+            else if (Answer === "NO" && hasComment && !hasEvidence) {
+                score = question.maxScore * 0.3;
+            }
+            else if (Answer === "NO" && !hasComment && !hasEvidence) {
+                score = question.maxScore * 0.2;
+            }
+            else if (Answer === "NOT_APPLICABLE" && !hasComment && hasEvidence) {
+                score = question.maxScore * 0.5;
+            }
+            else if (Answer === "NOT_APPLICABLE" && hasComment && !hasEvidence) {
+                score = question.maxScore * 0.3;
+            }
+            console.log("Questions Secore singel", score);
             const answerData = {
                 answer: data.answer,
                 score,
                 maxScore: question.maxScore,
                 comments: data.comments || null,
             };
-            // Handle evidence
             if (data.evidence) {
                 answerData.evidence = data.evidence;
                 if (question.evidenceRequired) {
@@ -597,7 +631,14 @@ exports.AssessmentService = {
                     totalMaxScore += ans.maxScore;
                 }
             });
-            const overallScore = totalMaxScore > 0 ? (totalScore / totalMaxScore) * 100 : 0;
+            // FIXED: Check if totalMaxScore > 0, not < 0
+            const overallScore = totalMaxScore > 0 ? (totalScore / totalMaxScore) * 90 : 0;
+            console.log("Final Calculation:", {
+                totalScore,
+                totalMaxScore,
+                overallScore,
+                percentage: overallScore.toFixed(2) + "%"
+            });
             // Determine risk score (numeric for sorting/ranking)
             const riskScore = bivScores.riskLevel === "HIGH" ? 3 : bivScores.riskLevel === "MEDIUM" ? 2 : 1;
             const result = yield prisma_1.prisma.$transaction((tx) => __awaiter(this, void 0, void 0, function* () {
@@ -660,52 +701,6 @@ exports.AssessmentService = {
                                 isResubmission: submission.status !== "DRAFT",
                             },
                         });
-                        // // Send email to vendor
-                        // try {
-                        //   const vendorUser = await tx.user.findUnique({
-                        //     where: { id: vendor.userId },
-                        //     select: { email: true },
-                        //   });
-                        //   if (vendorUser?.email) {
-                        //     await mailtrapService.sendHtmlEmail({
-                        //       to: vendorUser.email,
-                        //       subject: `New Assessment Submission: ${submission.assessment.title}`,
-                        //       html: `
-                        //         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
-                        //           <h2>New Assessment Submitted</h2>
-                        //           <p>Hello${vendorUser.email },</p>
-                        //           <p>A supplier has submitted responses for review.</p>
-                        //           <div style="background:#f8f9fa;padding:20px;border-radius:8px;margin:20px 0;">
-                        //             <p><strong>Assessment:</strong> ${submission.assessment.title}</p>
-                        //             <p><strong>Overall Score:</strong> ${overallScore.toFixed(1)}%</p>
-                        //             <p><strong>Risk Level:</strong> 
-                        //               <span style="padding:4px 8px;border-radius:4px;font-weight:bold;
-                        //                 background:${bivScores.riskLevel === 'HIGH' ? '#fee2e2;color:#dc2626' : 
-                        //                               bivScores.riskLevel === 'MEDIUM' ? '#fef3c7;color:#d97706' : 
-                        //                               '#d1fae5;color:#059669'}">
-                        //                 ${bivScores.riskLevel}
-                        //               </span>
-                        //             </p>
-                        //           </div>
-                        //           <p>Please review the submission at your earliest convenience.</p>
-                        //           <div style="text-align:center;margin:30px 0;">
-                        //             <a href="${process.env.FRONTEND_URL}/vendor/assessments/submissions/${submissionId}"
-                        //                style="background:#007bff;color:white;padding:14px 28px;text-decoration:none;border-radius:6px;font-weight:bold;display:inline-block;">
-                        //               Review Submission Now
-                        //             </a>
-                        //           </div>
-                        //           <hr style="border:none;border-top:1px solid #eee;margin:30px 0;">
-                        //           <p style="color:#666;font-size:12px;text-align:center;">
-                        //             © ${new Date().getFullYear()} CyberNark. All rights reserved.
-                        //           </p>
-                        //         </div>
-                        //       `,
-                        //     });
-                        //   }
-                        // } catch (error) {
-                        //   console.error("Failed to send submission notification email:", error);
-                        //   // Don't fail transaction due to email
-                        // }
                     }
                 }
                 return updatedSubmission;
@@ -1318,17 +1313,14 @@ exports.AssessmentService = {
                 } });
         });
     },
-    // src/modules/assessment/assessment.service.ts (add this method)
-    removeEvidence(answerId, userId) {
+    removeEvidence(questionId, userId) {
         return __awaiter(this, void 0, void 0, function* () {
             const answer = yield prisma_1.prisma.assessmentAnswer.findFirst({
-                where: { id: answerId },
+                where: { questionId },
                 include: {
                     submission: {
                         include: {
-                            user: {
-                                select: { id: true }
-                            }
+                            user: { select: { id: true } }
                         }
                     }
                 }
@@ -1336,29 +1328,28 @@ exports.AssessmentService = {
             if (!answer) {
                 throw new ApiError_1.default(http_status_1.default.NOT_FOUND, "Answer not found");
             }
-            // Check permissions
             const user = yield prisma_1.prisma.user.findUnique({
                 where: { id: userId },
-                select: { role: true, vendorId: true, supplierId: true }
+                select: { role: true, vendorId: true }
             });
             if (!user) {
                 throw new ApiError_1.default(http_status_1.default.NOT_FOUND, "User not found");
             }
             const canRemove = answer.submission.user.id === userId ||
-                (user.role === 'VENDOR' && answer.submission.vendorId === user.vendorId) ||
+                (user.role === 'VENDOR' &&
+                    answer.submission.vendorId === user.vendorId) ||
                 user.role === 'ADMIN';
             if (!canRemove) {
                 throw new ApiError_1.default(http_status_1.default.FORBIDDEN, "You don't have permission to remove this evidence");
             }
-            // Simply update the database without Cloudinary deletion
-            const updatedAnswer = yield prisma_1.prisma.assessmentAnswer.update({
-                where: { id: answerId },
+            // ✅ CORRECT update
+            return prisma_1.prisma.assessmentAnswer.updateMany({
+                where: { questionId }, // ✅ FIXED
                 data: {
                     evidence: null,
                     evidenceStatus: 'PENDING'
                 }
             });
-            return updatedAnswer;
         });
     },
     // ========== GET SUBMISSIONS BY USER ID ==========

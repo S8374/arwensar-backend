@@ -263,28 +263,30 @@ async login(payload: any, req?: any): Promise<LoginResponse> {
     throw new ApiError(httpStatus.UNAUTHORIZED, "Invalid credentials");
   }
 
-  // === SAFE & CORRECT IP EXTRACTION ===
-  const getClientIp = (request: any): string => {
-    if (!request || !request.headers) return "unknown";
+ // Utility to safely get client IP
+const getClientIp = (req?: any): string => {
+  if (!req || !req.headers) return "unknown";
 
-    const forwarded = request.headers["x-forwarded-for"];
-    if (forwarded) {
-      return (Array.isArray(forwarded) ? forwarded[0] : forwarded.split(",")[0]).trim();
-    }
+  // Common headers for proxied requests
+  const forwarded = req.headers["x-forwarded-for"];
+  if (forwarded) {
+    return (Array.isArray(forwarded) ? forwarded[0] : forwarded.split(",")[0]).trim();
+  }
 
-    return (
-      request.headers["x-real-ip"] ||
-      request.headers["cf-connecting-ip"] ||
-      request.headers["true-client-ip"] ||
-      request.connection?.remoteAddress ||
-      request.socket?.remoteAddress ||
-      request.ip ||
-      "unknown"
-    );
-  };
+  return (
+    req.headers["x-real-ip"] ||
+    req.headers["cf-connecting-ip"] ||   // Cloudflare
+    req.headers["true-client-ip"] ||     // Akamai
+    req.connection?.remoteAddress ||
+    req.socket?.remoteAddress ||
+    req.ip ||
+    "unknown"
+  );
+};
 
-  const clientIp = getClientIp(req);
-  const userAgent = req?.headers["user-agent"] || payload.userAgent || "unknown";
+// --- Usage in login ---
+const clientIp = getClientIp(req);
+const userAgent = req?.headers["user-agent"] || payload.userAgent || "unknown";
 
   // Update last login
   await prisma.user.update({

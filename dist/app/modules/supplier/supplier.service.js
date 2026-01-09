@@ -27,7 +27,7 @@ exports.SupplierService = {
     // ========== DASHBOARD ==========
     getDashboardStats(supplierId) {
         return __awaiter(this, void 0, void 0, function* () {
-            var _a, _b, _c, _d, _e, _f;
+            var _a, _b, _c, _d, _e, _f, _g;
             const supplier = yield prisma_1.prisma.supplier.findUnique({
                 where: { id: supplierId },
                 include: {
@@ -37,7 +37,18 @@ exports.SupplierService = {
                             email: true,
                             status: true,
                             lastLoginAt: true,
-                            profileImage: true
+                            profileImage: true,
+                            vendorProfile: {
+                                select: {
+                                    id: true,
+                                    companyName: true,
+                                    businessEmail: true,
+                                    contactNumber: true,
+                                    industryType: true,
+                                    companyLogo: true,
+                                    isActive: true
+                                }
+                            }
                         }
                     },
                     vendor: {
@@ -45,7 +56,10 @@ exports.SupplierService = {
                             id: true,
                             companyName: true,
                             contactNumber: true,
-                            businessEmail: true
+                            businessEmail: true,
+                            industryType: true, // ✅ ADD
+                            companyLogo: true, // ✅ ADD
+                            isActive: true // ✅ ADD
                         }
                     },
                     assessmentSubmissions: {
@@ -338,6 +352,27 @@ exports.SupplierService = {
                     isActive: supplier.isActive,
                     nis2Compliant: false
                 },
+                myVendor: ((_a = supplier.user) === null || _a === void 0 ? void 0 : _a.vendorProfile)
+                    ? {
+                        id: supplier.user.vendorProfile.id,
+                        companyName: supplier.user.vendorProfile.companyName,
+                        email: supplier.user.email, // USER email
+                        contactNumber: supplier.user.vendorProfile.contactNumber,
+                        industryType: supplier.user.vendorProfile.industryType,
+                        companyLogo: supplier.user.vendorProfile.companyLogo,
+                        isActive: supplier.user.vendorProfile.isActive
+                    }
+                    : supplier.vendor
+                        ? {
+                            id: supplier.vendor.id,
+                            companyName: supplier.vendor.companyName,
+                            email: supplier.vendor.businessEmail, // fallback
+                            contactNumber: supplier.vendor.contactNumber,
+                            industryType: supplier.vendor.industryType,
+                            companyLogo: supplier.vendor.companyLogo,
+                            isActive: supplier.vendor.isActive
+                        }
+                        : null,
                 contractInfo: {
                     contractStartDate: supplier.contractStartDate,
                     contractEndDate: supplier.contractEndDate,
@@ -354,16 +389,16 @@ exports.SupplierService = {
                 },
                 riskStats: {
                     riskLevel: supplier.riskLevel,
-                    bivScore: ((_a = supplier.bivScore) === null || _a === void 0 ? void 0 : _a.toNumber()) || null,
-                    businessScore: ((_b = supplier.businessScore) === null || _b === void 0 ? void 0 : _b.toNumber()) || null,
-                    integrityScore: ((_c = supplier.integrityScore) === null || _c === void 0 ? void 0 : _c.toNumber()) || null,
-                    availabilityScore: ((_d = supplier.availabilityScore) === null || _d === void 0 ? void 0 : _d.toNumber()) || null,
+                    bivScore: ((_b = supplier.bivScore) === null || _b === void 0 ? void 0 : _b.toNumber()) || null,
+                    businessScore: ((_c = supplier.businessScore) === null || _c === void 0 ? void 0 : _c.toNumber()) || null,
+                    integrityScore: ((_d = supplier.integrityScore) === null || _d === void 0 ? void 0 : _d.toNumber()) || null,
+                    availabilityScore: ((_e = supplier.availabilityScore) === null || _e === void 0 ? void 0 : _e.toNumber()) || null,
                     lastAssessmentDate: supplier.lastAssessmentDate,
                     isAssessmentOverdue
                 },
                 performanceStats: {
-                    qualityRating: ((_e = supplier.overallScore) === null || _e === void 0 ? void 0 : _e.toNumber()) || null,
-                    overallScore: ((_f = supplier.overallScore) === null || _f === void 0 ? void 0 : _f.toNumber()) || null,
+                    qualityRating: ((_f = supplier.overallScore) === null || _f === void 0 ? void 0 : _f.toNumber()) || null,
+                    overallScore: ((_g = supplier.overallScore) === null || _g === void 0 ? void 0 : _g.toNumber()) || null,
                     improvementTrend
                 },
                 documentStats,

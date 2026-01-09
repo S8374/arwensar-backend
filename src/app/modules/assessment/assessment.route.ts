@@ -68,7 +68,7 @@ router.post(
 router.post(
   "/submissions/:submissionId/review",
   auth("VENDOR", "ADMIN"),
-   checkUsage('assessmentsUsed', 1), 
+   //checkUsage('assessmentsUsed', 1), 
   validateRequest(reviewAssessmentSchema),
   AssessmentController.reviewAssessment
 );

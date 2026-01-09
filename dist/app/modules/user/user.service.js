@@ -44,7 +44,8 @@ exports.UserService = {
                             vendor: {
                                 select: {
                                     id: true,
-                                    companyName: true
+                                    companyName: true,
+                                    industryType: true,
                                 }
                             }
                         }
@@ -68,30 +69,34 @@ exports.UserService = {
     // ========== UPDATE USER PROFILE ==========
     updateUserProfile(userId, data) {
         return __awaiter(this, void 0, void 0, function* () {
-            var _a;
             const user = yield prisma_1.prisma.user.findUnique({
                 where: { id: userId },
-                include: { vendorProfile: true }
+                include: {
+                    vendorProfile: true,
+                    supplierProfile: true,
+                },
             });
-            console.log("User found to profile update", user);
-            if (!user) {
-                throw new ApiError_1.default(http_status_1.default.NOT_FOUND, "User not found");
-            }
+            if (!user)
+                throw new ApiError_1.default(404, "User not found");
             const updateData = {};
-            // ========== USER TABLE UPDATES ==========
-            if (data.profileImage) {
+            // ===== USER TABLE =====
+            if (data.profileImage)
                 updateData.profileImage = data.profileImage;
-            }
-            if (data.phoneNumber || data.contactNumber) {
-                updateData.phoneNumber = (_a = data.phoneNumber) !== null && _a !== void 0 ? _a : data.contactNumber;
-            }
-            // ========== VENDOR PROFILE UPDATES ==========
-            if (user.role === "VENDOR" && user.vendorId) {
+            if (data.contactNumber)
+                updateData.phoneNumber = data.contactNumber;
+            // ===== VENDOR =====
+            if (user.role === "VENDOR") {
                 updateData.vendorProfile = {
-                    update: Object.assign(Object.assign(Object.assign(Object.assign(Object.assign({}, (data.firstName && { firstName: data.firstName })), (data.lastName && { lastName: data.lastName })), (data.companyName && { companyName: data.companyName })), (data.contactNumber && { contactNumber: data.contactNumber })), (data.industryType && { industryType: data.industryType })),
+                    update: Object.assign(Object.assign(Object.assign(Object.assign(Object.assign(Object.assign({}, (data.firstName && { firstName: data.firstName })), (data.lastName && { lastName: data.lastName })), (data.companyName && { companyName: data.companyName })), (data.contactNumber && { contactNumber: data.contactNumber })), (data.industryType && { industryType: data.industryType })), (data.companyLogo && { companyLogo: data.companyLogo })),
                 };
             }
-            const updatedUser = yield prisma_1.prisma.user.update({
+            // ===== SUPPLIER =====
+            if (user.role === "SUPPLIER") {
+                updateData.supplierProfile = {
+                    update: Object.assign(Object.assign({}, (data.firstName && { contactPerson: data.firstName })), (data.contactNumber && { phone: data.contactNumber })),
+                };
+            }
+            return prisma_1.prisma.user.update({
                 where: { id: userId },
                 data: updateData,
                 include: {
@@ -99,17 +104,6 @@ exports.UserService = {
                     supplierProfile: true,
                 },
             });
-            console.log("Updated user", updatedUser);
-            yield prisma_1.prisma.activityLog.create({
-                data: {
-                    userId,
-                    action: "UPDATE_PROFILE",
-                    entityType: "USER",
-                    entityId: userId,
-                    details: { updatedFields: Object.keys(data) },
-                },
-            });
-            return updatedUser;
         });
     },
     // ========== UPDATE PASSWORD ==========

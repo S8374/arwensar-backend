@@ -229,23 +229,25 @@ exports.AuthService = {
             if (!isPasswordValid) {
                 throw new ApiError_1.default(http_status_1.default.UNAUTHORIZED, "Invalid credentials");
             }
-            // === SAFE & CORRECT IP EXTRACTION ===
-            const getClientIp = (request) => {
+            // Utility to safely get client IP
+            const getClientIp = (req) => {
                 var _a, _b;
-                if (!request || !request.headers)
+                if (!req || !req.headers)
                     return "unknown";
-                const forwarded = request.headers["x-forwarded-for"];
+                // Common headers for proxied requests
+                const forwarded = req.headers["x-forwarded-for"];
                 if (forwarded) {
                     return (Array.isArray(forwarded) ? forwarded[0] : forwarded.split(",")[0]).trim();
                 }
-                return (request.headers["x-real-ip"] ||
-                    request.headers["cf-connecting-ip"] ||
-                    request.headers["true-client-ip"] ||
-                    ((_a = request.connection) === null || _a === void 0 ? void 0 : _a.remoteAddress) ||
-                    ((_b = request.socket) === null || _b === void 0 ? void 0 : _b.remoteAddress) ||
-                    request.ip ||
+                return (req.headers["x-real-ip"] ||
+                    req.headers["cf-connecting-ip"] || // Cloudflare
+                    req.headers["true-client-ip"] || // Akamai
+                    ((_a = req.connection) === null || _a === void 0 ? void 0 : _a.remoteAddress) ||
+                    ((_b = req.socket) === null || _b === void 0 ? void 0 : _b.remoteAddress) ||
+                    req.ip ||
                     "unknown");
             };
+            // --- Usage in login ---
             const clientIp = getClientIp(req);
             const userAgent = (req === null || req === void 0 ? void 0 : req.headers["user-agent"]) || payload.userAgent || "unknown";
             // Update last login
