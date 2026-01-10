@@ -1,94 +1,133 @@
+// src/server.ts
 import { Server } from 'http';
 import app from './app';
-import { connectRedis } from './app/shared/redis';
 import { config } from './config';
 import { seedDatabase } from './app/shared/seed';
 import { resetExpiredSubscriptions } from './utils/resetPlanUsage';
-import cron from 'node-cron';
-import { comprehensiveMonitorService } from './automatedMonitoring/automatedMonitoring.service';
+import { MonitoringQueueService } from './automatedMonitoring/automatedMonitoring.service';
+import { connectRedis } from './app/shared/redis';
 
-
+let server: Server;
+let monitoringService: MonitoringQueueService | null = null;
 
 async function bootstrap() {
-    // This variable will hold our server instance
-    let server: Server;
-
-    try {
-        // Start the server
-        server = app.listen(config.port, () => {
-            console.log(`🚀 Server is running on http://localhost:${config.port}`);
-        });
-
-        // Function to gracefully shut down the server
-        const exitHandler = () => {
-            if (server) {
-                server.close(() => {
-                    console.log('Server closed gracefully.');
-                    process.exit(1); // Exit with a failure code
-                });
-            } else {
-                process.exit(1);
-            }
-        };
-
-        // Handle unhandled promise rejections
-        process.on('unhandledRejection', (error) => {
-            console.log('Unhandled Rejection is detected, we are closing our server...');
-            if (server) {
-                server.close(() => {
-                    console.log(error);
-                    process.exit(1);
-                });
-            } else {
-                process.exit(1);
-            }
-        });
-    } catch (error) {
-        console.error('Error during server startup:', error);
-        process.exit(1);
-    }
-    (async () => {
-        await connectRedis();
-        await seedDatabase();
-        cron.schedule('0 2 * * *', () => {
-            console.log('Running subscription reset cron job...');
-            resetExpiredSubscriptions().catch(console.error);
-        });
-
-        // setTimeout(() => {
-        //     comprehensiveMonitorService.startAllMonitors();
-        //     console.log('📡 Comprehensive Monitoring: ACTIVE');
-
-        //     // Log initial stats
-        //     comprehensiveMonitorService.getComprehensiveStats().then(stats => {
-        //         if (stats) {
-        //             console.log('📊 Initial Monitoring Stats:', stats);
-        //         }
-        //     });
-        // }, 20000); // 20 seconds after startup
-
-
-
-    })();
-
-
-
+  try {
+    console.log('🚀 Starting CyberNark Server...');
+    
+    // Connect to Redis
+    await connectRedis();
+    console.log('✅ Redis connected');
+    
+    // Seed database
+    await seedDatabase();
+    console.log('✅ Database seeded');
+    
+    // Initialize monitoring service
+    monitoringService = new MonitoringQueueService();
+    await monitoringService.initializeMonitoringSystem();
+    console.log('✅ Monitoring system initialized');
+    
+    // Start the server
+    server = app.listen(config.port, () => {
+      console.log(`✅ Server is running on http://localhost:${config.port}`);
+      console.log(`📁 Environment: ${config.node_env}`);
+      console.log(`🔗 Database: Connected`);
+      console.log(`👤 Admin: ${config.ADMIN_EMAIL}`);
+    });
+    
+    // Setup subscription reset cron (using node-cron for this)
+    const cron = await import('node-cron');
+    cron.schedule('0 2 * * *', async () => {
+      console.log('🔄 Running subscription reset cron job...');
+      try {
+        await resetExpiredSubscriptions();
+        console.log('✅ Subscription reset completed');
+      } catch (error) {
+        console.error('❌ Subscription reset failed:', error);
+      }
+    });
+    console.log('✅ Subscription reset cron scheduled');
+    
+    // Setup graceful shutdown
+    setupGracefulShutdown();
+    
+  } catch (error) {
+    console.error('❌ Error during server startup:', error);
+    await gracefulShutdown();
+    process.exit(1);
+  }
 }
 
+// ========== GRACEFUL SHUTDOWN ==========
+function setupGracefulShutdown() {
+  // Handle unhandled promise rejections
+  process.on('unhandledRejection', (error) => {
+    console.error('❌ Unhandled Rejection:', error);
+    if (server) {
+      server.close(() => {
+        console.log('🔒 Server closed due to unhandled rejection');
+        process.exit(1);
+      });
+    } else {
+      process.exit(1);
+    }
+  });
+  
+  // Handle uncaught exceptions
+  process.on('uncaughtException', (error) => {
+    console.error('❌ Uncaught Exception:', error);
+    gracefulShutdown().then(() => {
+      process.exit(1);
+    });
+  });
+  
+  // Handle termination signals
+  process.on('SIGTERM', () => {
+    console.log('🔻 SIGTERM received');
+    gracefulShutdown().then(() => {
+      process.exit(0);
+    });
+  });
+  
+  process.on('SIGINT', () => {
+    console.log('🔻 SIGINT received (Ctrl+C)');
+    gracefulShutdown().then(() => {
+      process.exit(0);
+    });
+  });
+}
 
-
- 
-// process.on('SIGTERM', () => {
-//   console.log('🛑 SIGTERM received, stopping monitors...');
-//   comprehensiveMonitorService.stopAllMonitors();
-//   process.exit(0);
-// });
-
-// process.on('SIGINT', () => {
-//   console.log('🛑 SIGINT received, stopping monitors...');
-//   comprehensiveMonitorService.stopAllMonitors();
-//   process.exit(0);
-// });
-
+// ========== GRACEFUL SHUTDOWN FUNCTION ==========
+async function gracefulShutdown() {
+  console.log('\n🔻 Starting graceful shutdown...');
+  
+  try {
+    // Cleanup monitoring service
+    if (monitoringService) {
+      await monitoringService.cleanup();
+      console.log('✅ Monitoring service cleaned up');
+    }
+    
+    // Close server
+    if (server) {
+      await new Promise<void>((resolve, reject) => {
+        server.close((err) => {
+          if (err) {
+            console.error('❌ Error closing server:', err);
+            reject(err);
+          } else {
+            console.log('✅ HTTP server closed');
+            resolve();
+          }
+        });
+      });
+    }
+    
+    console.log('✅ Graceful shutdown completed');
+    
+  } catch (error) {
+    console.error('❌ Error during graceful shutdown:', error);
+  }
+}
 
 bootstrap();

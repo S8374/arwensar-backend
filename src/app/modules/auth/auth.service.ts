@@ -977,6 +977,7 @@ async getMe(userId: string): Promise<any> {
           plan: {
             select: {
               name: true,
+              id : true ,
               features: true,
             },
           },

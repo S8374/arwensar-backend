@@ -1,543 +1,686 @@
-// src/services/comprehensive-monitor.service.ts
-import { PrismaClient, Criticality, NotificationType, AssessmentStage, SubmissionStatus } from '@prisma/client';
-import { CronJob } from 'cron';
+// src/services/monitoring-queue.service.ts
+import { Queue, Worker, Job, QueueEvents } from 'bullmq';
+import { getBullMQConnection } from '../app/shared/redis';
+import { prisma } from '../app/shared/prisma';
 import { NotificationService } from '../app/modules/notification/notification.service';
 
-const prisma = new PrismaClient();
+export class MonitoringQueueService {
+  private monitoringQueue: Queue;
+  private highRiskQueue: Queue;
+  private contractQueue: Queue;
+  private assessmentQueue: Queue;
+  private queueEvents: QueueEvents;
 
-export class ComprehensiveMonitorService {
-  private riskCheckJob: CronJob | null = null;
-  private contractCheckJob: CronJob | null = null;
-  private assessmentReminderJob: CronJob | null = null;
-  private riskUpdateJob: CronJob | null = null;
+  private connection: any;
 
-  // ========== START ALL MONITORS ==========
-  startAllMonitors() {
-    console.log('🚀 Starting comprehensive monitoring services...');
-    
-    // Risk checks every 6 hours
-    this.riskCheckJob = new CronJob('0 */6 * * *', () => {
-      console.log('🔍 Running high-risk supplier check...');
-      this.checkHighRiskSuppliers();
+  constructor() {
+    // Get Redis connection for BullMQ
+    this.connection = getBullMQConnection();
+
+    // Main monitoring queue
+    this.monitoringQueue = new Queue('monitoring-queue', {
+      connection: this.connection,
+      defaultJobOptions: {
+        removeOnComplete: 100,
+        removeOnFail: 100,
+        attempts: 3,
+        backoff: {
+          type: 'exponential',
+          delay: 5000
+        }
+      }
     });
 
-    // Contract expiry checks daily at 8 AM
-    this.contractCheckJob = new CronJob('0 8 * * *', () => {
-      console.log('📅 Running contract expiry check...');
-      this.checkExpiringContracts();
+    // Dedicated queues
+    this.highRiskQueue = new Queue('high-risk-monitoring', {
+      connection: this.connection
+    });
+    this.contractQueue = new Queue('contract-monitoring', {
+      connection: this.connection
+    });
+    this.assessmentQueue = new Queue('assessment-monitoring', {
+      connection: this.connection
     });
 
-    // Assessment reminders every day at 9 AM
-    this.assessmentReminderJob = new CronJob('0 9 * * *', () => {
-      console.log('📝 Running assessment completion check...');
-      this.checkIncompleteAssessments();
+    // Queue events for monitoring
+    this.queueEvents = new QueueEvents('monitoring-queue', {
+      connection: this.connection
     });
 
- 
-
-    this.riskCheckJob.start();
-    this.contractCheckJob.start();
-    this.assessmentReminderJob.start();
-    
-    console.log('✅ All monitoring services started');
-    
-    // Run initial checks after startup
-    setTimeout(() => {
-      this.checkHighRiskSuppliers();
-      this.checkExpiringContracts();
-      this.checkIncompleteAssessments();
-      this.checkSuppliersWithNoAssessments();
-    }, 15000);
+    this.setupQueueEventListeners();
   }
 
-  // ========== STOP ALL MONITORS ==========
-  stopAllMonitors() {
-    if (this.riskCheckJob) {
-      this.riskCheckJob.stop();
-      console.log('⏹️ Risk check monitor stopped');
-    }
-    if (this.contractCheckJob) {
-      this.contractCheckJob.stop();
-      console.log('⏹️ Contract check monitor stopped');
-    }
-    if (this.assessmentReminderJob) {
-      this.assessmentReminderJob.stop();
-      console.log('⏹️ Assessment reminder monitor stopped');
-    }
-    if (this.riskUpdateJob) {
-      this.riskUpdateJob.stop();
-      console.log('⏹️ Risk update monitor stopped');
-    }
+  // ========== SETUP QUEUE EVENT LISTENERS ==========
+  private setupQueueEventListeners() {
+    this.queueEvents.on(
+      "completed",
+      ({ jobId, returnvalue }: { jobId: string; returnvalue: unknown }) => {
+        console.log(`✅ Job ${jobId} completed successfully`);
+      }
+    );
+
+    this.queueEvents.on(
+      "failed",
+      ({ jobId, failedReason }: { jobId: string; failedReason?: string }) => {
+        console.error(`❌ Job ${jobId} failed:`, failedReason);
+      }
+    );
+
+    this.queueEvents.on(
+      "progress",
+      ({ jobId, data }: { jobId: string; data: unknown }) => {
+        console.log(`📈 Job ${jobId} progress:`, data);
+      }
+    );
+
+    this.queueEvents.on(
+      "stalled",
+      ({ jobId }: { jobId: string }) => {
+        console.warn(`⚠️ Job ${jobId} stalled`);
+      }
+    );
   }
 
-  // ========== CHECK HIGH RISK SUPPLIERS (EXISTING) ==========
-  async checkHighRiskSuppliers() {
+
+  // ========== CREATE WORKERS ==========
+  private createWorkers() {
+    // Worker for main monitoring tasks
+    new Worker('monitoring-queue', async (job: Job) => {
+      console.log(`🔄 Processing job: ${job.name} (ID: ${job.id})`);
+
+      try {
+        switch (job.name) {
+          case 'checkHighRiskSuppliers':
+            await this.processHighRiskSuppliers(job.data); //ok
+            break;
+          case 'checkExpiringContracts':
+            await this.processExpiringContracts(job.data); //ok
+            break;
+          case 'checkIncompleteAssessments':
+            await this.processIncompleteAssessments(job.data); //ok
+            break;
+          case 'checkNoAssessmentSuppliers':
+            await this.processNoAssessmentSuppliers(job.data);
+            break;
+          case 'checkCriticalSuppliers':
+            await this.processCriticalSuppliers(job.data);
+            break;
+          default:
+            throw new Error(`Unknown job type: ${job.name}`);
+        }
+
+        return { success: true, jobId: job.id, timestamp: new Date().toISOString() };
+      } catch (error) {
+        console.error(`❌ Error processing job ${job.id}:`, error);
+        throw error; // Let BullMQ handle retries
+      }
+    }, {
+      connection: this.connection,
+      concurrency: 5,
+      limiter: {
+        max: 10,
+        duration: 1000 // 10 jobs per second
+      }
+    });
+
+    // Worker for high-risk monitoring
+    new Worker('high-risk-monitoring', async (job: Job) => {
+      console.log(`🔴 Processing high-risk job: ${job.id}`);
+      await this.processHighRiskSuppliers(job.data);
+    }, {
+      connection: this.connection,
+      concurrency: 3
+    });
+
+    // Worker for contract monitoring
+    new Worker('contract-monitoring', async (job: Job) => {
+      console.log(`📅 Processing contract job: ${job.id}`);
+      await this.processExpiringContracts(job.data);
+    }, {
+      connection: this.connection,
+      concurrency: 3
+    });
+
+    // Worker for assessment monitoring
+    new Worker('assessment-monitoring', async (job: Job) => {
+      console.log(`📝 Processing assessment job: ${job.id}`);
+      await this.processIncompleteAssessments(job.data);
+    }, {
+      connection: this.connection,
+      concurrency: 3
+    });
+  }
+
+  // ========== INITIALIZE MONITORING SYSTEM ==========
+  async initializeMonitoringSystem() {
+    console.log('🚀 Initializing BullMQ monitoring system...');
+
     try {
-      console.log('🔄 Scanning for high-risk suppliers...');
-      
+      // Create workers
+      this.createWorkers();
+      console.log('✅ Workers created');
+
+      // Schedule recurring jobs
+      await this.scheduleRecurringJobs();
+      console.log('✅ Recurring jobs scheduled');
+
+      // Queue initial checks
+      await this.queueInitialChecks();
+      console.log('✅ Initial checks queued');
+
+      console.log('✅ BullMQ monitoring system initialized successfully');
+    } catch (error) {
+      console.error('❌ Failed to initialize monitoring system:', error);
+      throw error;
+    }
+  }
+
+  // ========== SCHEDULE RECURRING JOBS ==========
+  private async scheduleRecurringJobs() {
+    try {
+      const now = new Date();
+
+      // Remove any existing recurring jobs first
+      const repeatableJobs = await this.monitoringQueue.getRepeatableJobs();
+      for (const job of repeatableJobs) {
+        await this.monitoringQueue.removeRepeatableByKey(job.key);
+      }
+
+      // High-risk supplier check - every 6 hours
+      await this.monitoringQueue.add(
+        'checkHighRiskSuppliers',
+        { type: 'recurring', priority: 'high', timestamp: now.toISOString() },
+        {
+          jobId: 'high-risk-recurring',
+          repeat: {
+            pattern: '0 */6 * * *',
+
+            tz: 'UTC'
+          },
+          priority: 1
+        }
+      );
+
+      // Contract expiry check - daily at 8 AM
+      await this.monitoringQueue.add(
+        'checkExpiringContracts',
+        { type: 'recurring', priority: 'medium', timestamp: now.toISOString() },
+        {
+          jobId: 'contract-expiry-recurring',
+          repeat: {
+            pattern: '0 8 * * *',
+            tz: 'UTC'
+          },
+          priority: 2
+        }
+      );
+
+      // Assessment completion check - daily at 9 AM
+      await this.monitoringQueue.add(
+        'checkIncompleteAssessments',
+        { type: 'recurring', priority: 'medium', timestamp: now.toISOString() },
+        {
+          jobId: 'assessment-completion-recurring',
+          repeat: {
+            pattern: '0 9 * * *',
+            tz: 'UTC'
+          },
+          priority: 2
+        }
+      );
+
+      // Critical suppliers check - daily at 11 AM
+      await this.monitoringQueue.add(
+        'checkCriticalSuppliers',
+        { type: 'recurring', priority: 'high', timestamp: now.toISOString() },
+        {
+          jobId: 'critical-suppliers-recurring',
+          repeat: {
+            pattern: '0 11 * * *',
+            tz: 'UTC'
+          },
+          priority: 1
+        }
+      );
+
+      // Daily report generation - daily at 5 PM
+      await this.monitoringQueue.add(
+        'generateDailyReport',
+        { type: 'recurring', priority: 'low', timestamp: now.toISOString() },
+        {
+          jobId: 'daily-report-recurring',
+          repeat: {
+            pattern: '0 17 * * *',
+            tz: 'UTC'
+          },
+          priority: 3
+        }
+      );
+
+    } catch (error) {
+      console.error('❌ Error scheduling recurring jobs:', error);
+      throw error;
+    }
+  }
+
+  // ========== QUEUE INITIAL CHECKS ==========
+  private async queueInitialChecks() {
+    try {
+      const initialChecks = [
+        { name: 'checkHighRiskSuppliers', delay: 10000, priority: 1 },
+        { name: 'checkExpiringContracts', delay: 20000, priority: 2 },
+        { name: 'checkIncompleteAssessments', delay: 30000, priority: 2 },
+        { name: 'checkCriticalSuppliers', delay: 40000, priority: 1 }
+      ];
+
+      for (const check of initialChecks) {
+        await this.monitoringQueue.add(
+          check.name,
+          { type: 'initial', timestamp: new Date().toISOString() },
+          {
+            delay: check.delay,
+            priority: check.priority
+          }
+        );
+      }
+
+    } catch (error) {
+      console.error('❌ Error queuing initial checks:', error);
+    }
+  }
+
+  // ========== PROCESS HIGH RISK SUPPLIERS ==========
+  private async processHighRiskSuppliers(data: any) {
+    console.log('🔍 Processing high-risk suppliers...');
+
+    try {
       const highRiskSuppliers = await prisma.supplier.findMany({
         where: {
-          riskLevel: {
-            in: ['HIGH', 'CRITICAL']
-          },
+          riskLevel: { in: ['HIGH', 'CRITICAL'] },
           isDeleted: false,
-          isActive: true,
-          vendor: {
-            isDeleted: false,
-            isActive: true
-          }
+          isActive: true
         },
         include: {
           vendor: {
             include: {
-              user: {
-                select: {
-                  id: true,
-                  email: true
-                }
-              }
+              user: { select: { id: true, email: true } }
             }
           },
-          user: {
-            select: {
-              id: true,
-              email: true
-            }
-          }
-        }
+          user: { select: { id: true, email: true } }
+        },
+        take: 100
       });
 
       console.log(`📊 Found ${highRiskSuppliers.length} high-risk suppliers`);
 
       for (const supplier of highRiskSuppliers) {
-        try {
-          // ===============================
-          // 1️⃣ NOTIFICATION TO VENDOR
-          // ===============================
-          if (supplier.vendor?.user?.id) {
-            await this.sendRiskNotificationToVendor(supplier);
-          }
-
-          // ===============================
-          // 2️⃣ NOTIFICATION TO SUPPLIER (if they have a user account)
-          // ===============================
-          if (supplier.user?.id) {
-            await this.sendRiskNotificationToSupplier(supplier);
-          }
-
-        } catch (error) {
-          console.error(`❌ Error processing supplier ${supplier.id}:`, error);
-        }
+        await this.sendRiskNotifications(supplier);
       }
 
-      // Send consolidated report if many high-risk suppliers
-      if (highRiskSuppliers.length >= 3) {
-        await this.sendConsolidatedRiskReport(highRiskSuppliers);
-      }
+
 
     } catch (error) {
-      console.error('❌ Error in checkHighRiskSuppliers:', error);
+      console.error('❌ Error processing high-risk suppliers:', error);
+
+      throw error;
     }
   }
 
-  // ========== SEND RISK NOTIFICATION TO VENDOR (EXISTING) ==========
-  private async sendRiskNotificationToVendor(supplier: any) {
-    const vendorUserId = supplier.vendor.user.id;
-    
-    // Check if risk notification already sent today
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-
-    const existingNotification = await prisma.notification.findFirst({
-      where: {
-        userId: vendorUserId,
-        type: 'RISK_ALERT',
-        metadata: {
-          path: ['supplierId'],
-          equals: supplier.id
-        },
-        createdAt: {
-          gte: today
-        }
-      }
-    });
-
-    if (existingNotification) {
-      console.log(`⏭️ Risk alert already sent today to vendor for supplier: ${supplier.name}`);
-      return;
-    }
-
-    // Create notification for vendor
-    await NotificationService.createNotification({
-      userId: vendorUserId,
-      title: `🚨 High Risk Supplier: ${supplier.name}`,
-      message: `Your supplier "${supplier.name}" has been identified as ${supplier.riskLevel} risk level. Immediate review recommended.`,
-      type: 'RISK_ALERT',
-      metadata: {
-        supplierId: supplier.id,
-        supplierName: supplier.name,
-        riskLevel: supplier.riskLevel,
-        overallScore: supplier.overallScore,
-        bivScore: supplier.bivScore,
-        lastAssessmentDate: supplier.lastAssessmentDate?.toISOString(),
-        complianceRate: supplier.complianceRate,
-        vendorId: supplier.vendorId,
-        isSupplierUserExists: !!supplier.user?.id
-      },
-      priority: 'HIGH'
-    });
-
-    console.log(`✅ Risk alert sent to VENDOR for supplier: ${supplier.name}`);
-  }
-
-  // ========== SEND RISK NOTIFICATION TO SUPPLIER (EXISTING) ==========
-  private async sendRiskNotificationToSupplier(supplier: any) {
-    const supplierUserId = supplier.user.id;
-    
-    // Check if risk notification already sent today
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-
-    const existingNotification = await prisma.notification.findFirst({
-      where: {
-        userId: supplierUserId,
-        type: 'RISK_ALERT',
-        metadata: {
-          path: ['supplierId'],
-          equals: supplier.id
-        },
-        createdAt: {
-          gte: today
-        }
-      }
-    });
-
-    if (existingNotification) {
-      console.log(`⏭️ Risk alert already sent today to supplier: ${supplier.name}`);
-      return;
-    }
-
-    // Create notification for supplier
-    await NotificationService.createNotification({
-      userId: supplierUserId,
-      title: `⚠️ Risk Level Update: ${supplier.riskLevel}`,
-      message: `Your risk level has been updated to ${supplier.riskLevel}. Please review your compliance metrics and take necessary actions.`,
-      type: 'RISK_ALERT',
-      metadata: {
-        supplierId: supplier.id,
-        supplierName: supplier.name,
-        riskLevel: supplier.riskLevel,
-        overallScore: supplier.overallScore,
-        bivScore: supplier.bivScore,
-        complianceRate: supplier.complianceRate,
-        vendorName: supplier.vendor?.companyName,
-        lastAssessmentDate: supplier.lastAssessmentDate?.toISOString(),
-        recommendedActions: [
-          'Review security controls',
-          'Update compliance documents',
-          'Complete pending assessments',
-          'Contact vendor for support'
-        ]
-      },
-      priority: 'HIGH'
-    });
-
-    console.log(`✅ Risk alert sent to SUPPLIER: ${supplier.name}`);
-  }
-
-  // ========== CHECK EXPIRING CONTRACTS (EXISTING) ==========
-  async checkExpiringContracts() {
+  // ========== SEND RISK NOTIFICATIONS ==========
+  private async sendRiskNotifications(supplier: any) {
     try {
-      console.log('🔄 Scanning for expiring contracts...');
-      
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+
+      // Send to vendor
+      if (supplier.vendor?.user?.id) {
+
+        //send first vendor 
+
+        const existingVendorNotification = await prisma.notification.findFirst({
+          where: {
+            userId: supplier.vendor.user.id,
+            type: 'RISK_ALERT',
+            metadata: { path: ['supplierId'], equals: supplier.id },
+            createdAt: { gte: today }
+          }
+        });
+
+        if (!existingVendorNotification) {
+          await NotificationService.createNotification({
+            userId: supplier.vendor.user.id,
+            title: `🚨 High Risk Supplier: ${supplier.name}`,
+            message: `Supplier "${supplier.name}" is at ${supplier.riskLevel} risk level.`,
+            type: 'RISK_ALERT',
+            metadata: {
+              supplierId: supplier.id,
+              supplierName: supplier.name,
+              riskLevel: supplier.riskLevel
+            },
+            priority: 'HIGH'
+          });
+        }
+      }
+
+      // Send to supplier
+      if (supplier.user?.id) {
+        const existingSupplierNotification = await prisma.notification.findFirst({
+          where: {
+            userId: supplier.user.id,
+            type: 'RISK_ALERT',
+            metadata: { path: ['supplierId'], equals: supplier.id },
+            createdAt: { gte: today }
+          }
+        });
+
+        if (!existingSupplierNotification) {
+          await NotificationService.createNotification({
+            userId: supplier.user.id,
+            title: `⚠️ Risk Level Update: ${supplier.riskLevel}`,
+            message: `Your risk level has been updated to ${supplier.riskLevel}.`,
+            type: 'RISK_ALERT',
+            metadata: {
+              supplierId: supplier.id,
+              riskLevel: supplier.riskLevel
+            },
+            priority: 'HIGH'
+          });
+        }
+      }
+    } catch (error) {
+      console.error(`❌ Error sending risk notifications for supplier ${supplier.id}:`, error);
+    }
+  }
+
+  // ========== PROCESS EXPIRING CONTRACTS ==========
+  private async processExpiringContracts(data: any) {
+    console.log('📅 Processing expiring contracts...');
+
+    try {
       const today = new Date();
       const thirtyDaysFromNow = new Date();
       thirtyDaysFromNow.setDate(today.getDate() + 30);
+      // 🔴 EXPIRED CONTRACTS
+      const expiredContracts = await prisma.supplier.findMany({
+        where: {
+          contractEndDate: {
+            lt: today
+          },
+          isDeleted: false,
+          isActive: true
+        },
+        include: {
+          vendor: { include: { user: true } },
+          user: true
+        }
+      });
 
-      // Find contracts expiring within different timeframes
+      console.log(`❌ Expired contracts found: ${expiredContracts.length}`);
+
       const expiringContracts = await prisma.supplier.findMany({
         where: {
           contractEndDate: {
             not: null,
-            gte: today, // Not expired yet
-            lte: thirtyDaysFromNow // Within 30 days
+            gte: today,
+            lte: thirtyDaysFromNow
           },
           isDeleted: false,
-          isActive: true,
+          isActive: true
+        },
+        include: {
           vendor: {
-            isDeleted: false,
-            isActive: true
+            include: {
+              user: { select: { id: true, email: true } }
+            }
+          },
+          user: { select: { id: true, email: true } }
+        },
+        take: 100
+      });
+
+      console.log(`📊 Found ${expiringContracts.length} expiring contracts`);
+
+      for (const supplier of expiringContracts) {
+        await this.sendContractNotifications(supplier);
+      }
+
+
+
+    } catch (error) {
+      console.error('❌ Error processing expiring contracts:', error);
+
+      throw error;
+    }
+  }
+
+  // ========== SEND CONTRACT NOTIFICATIONS ==========
+  private async sendContractNotifications(supplier: any) {
+    try {
+      const today = new Date();
+      const daysLeft = Math.ceil(
+        (supplier.contractEndDate!.getTime() - today.getTime()) / (1000 * 60 * 60 * 24)
+      );
+
+      // Check if notification was sent in last 3 days
+      const threeDaysAgo = new Date();
+      threeDaysAgo.setDate(threeDaysAgo.getDate() - 3);
+
+      // Send to vendor
+      if (supplier.vendor?.user?.id) {
+        const existingNotification = await prisma.notification.findFirst({
+          where: {
+            userId: supplier.vendor.user.id,
+            type: daysLeft <= 7 ? 'CONTRACT_EXPIRY' : 'CONTRACT_EXPIRING_SOON',
+            metadata: { path: ['supplierId'], equals: supplier.id },
+            createdAt: { gte: threeDaysAgo }
+          }
+        });
+
+        if (!existingNotification) {
+          await NotificationService.createNotification({
+            userId: supplier.vendor.user.id,
+            title: `📅 Contract Expiry: ${supplier.name} (${daysLeft} days)`,
+            message: `Contract with "${supplier.name}" expires in ${daysLeft} days.`,
+            type: daysLeft <= 7 ? 'CONTRACT_EXPIRY' : 'CONTRACT_EXPIRING_SOON',
+            metadata: {
+              supplierId: supplier.id,
+              supplierName: supplier.name,
+              daysRemaining: daysLeft
+            },
+            priority: daysLeft <= 7 ? 'HIGH' : daysLeft <= 15 ? 'MEDIUM' : 'LOW'
+          });
+        }
+      }
+      // Send to supplier 
+      if (supplier.user?.id) {
+        const existingNotification = await prisma.notification.findFirst({
+          where: {
+            userId: supplier.vendor.user.id,
+            type: daysLeft <= 7 ? 'CONTRACT_EXPIRY' : 'CONTRACT_EXPIRING_SOON',
+            metadata: { path: ['supplierId'], equals: supplier.id },
+            createdAt: { gte: threeDaysAgo }
+          }
+        });
+
+        if (!existingNotification) {
+          await NotificationService.createNotification({
+            userId: supplier.vendor.user.id,
+            title: `📅 Contract Expiry: ${supplier.name} (${daysLeft} days)`,
+            message: `Contract with "${supplier.name}" expires in ${daysLeft} days.`,
+            type: daysLeft <= 7 ? 'CONTRACT_EXPIRY' : 'CONTRACT_EXPIRING_SOON',
+            metadata: {
+              supplierId: supplier.id,
+              supplierName: supplier.name,
+              daysRemaining: daysLeft
+            },
+            priority: daysLeft <= 7 ? 'HIGH' : daysLeft <= 15 ? 'MEDIUM' : 'LOW'
+          });
+        }
+      }
+    } catch (error) {
+      console.error(`❌ Error sending contract notifications for supplier ${supplier.id}:`, error);
+    }
+  }
+
+  // ========== PROCESS INCOMPLETE ASSESSMENTS ==========
+  private async processIncompleteAssessments(data: any) {
+    console.log('📝 Processing incomplete assessments...');
+
+    try {
+      const suppliers = await prisma.supplier.findMany({
+        where: {
+          isDeleted: false,
+          isActive: true,
+          assessmentSubmissions: {
+            some: {
+              status: { in: ['DRAFT', 'PENDING'] }
+            }
           }
         },
         include: {
           vendor: {
             include: {
-              user: {
-                select: {
-                  id: true,
-                  email: true
-                }
-              }
+              user: { select: { id: true, email: true } }
             }
           },
-          user: {
-            select: {
-              id: true,
-              email: true
+          user: { select: { id: true, email: true } },
+          assessmentSubmissions: {
+            where: { status: { in: ['DRAFT', 'PENDING'] } },
+            take: 5
+          }
+        },
+        take: 50
+      });
+
+      console.log(`📊 Found ${suppliers.length} suppliers with incomplete assessments`);
+
+      for (const supplier of suppliers) {
+        await this.sendAssessmentReminders(supplier);
+      }
+
+
+
+    } catch (error) {
+      console.error('❌ Error processing incomplete assessments:', error);
+
+      throw error;
+    }
+  }
+
+  // ========== SEND ASSESSMENT REMINDERS ==========
+  private async sendAssessmentReminders(supplier: any) {
+    try {
+      const twoDaysAgo = new Date();
+      twoDaysAgo.setDate(twoDaysAgo.getDate() - 2);
+
+      // Send to supplier
+      if (supplier.user?.id) {
+        const existingNotification = await prisma.notification.findFirst({
+          where: {
+            userId: supplier.user.id,
+            type: 'ASSESSMENT_DUE',
+            metadata: { path: ['supplierId'], equals: supplier.id },
+            createdAt: { gte: twoDaysAgo }
+          }
+        });
+
+        if (!existingNotification) {
+          await NotificationService.createNotification({
+            userId: supplier.user.id,
+            title: `📝 Incomplete Assessments`,
+            message: `You have incomplete assessments. Please complete them.`,
+            type: 'ASSESSMENT_DUE',
+            priority: 'MEDIUM'
+          });
+        }
+      }
+
+    } catch (error) {
+      console.error(`❌ Error sending assessment reminders for supplier ${supplier.id}:`, error);
+    }
+  }
+
+  // ========== PROCESS NO ASSESSMENT SUPPLIERS ==========
+  private async processNoAssessmentSuppliers(data: any) {
+    console.log('🔍 Processing suppliers with no assessments...');
+
+    try {
+      const suppliers = await prisma.supplier.findMany({
+        where: {
+          isDeleted: false,
+          isActive: true,
+          assessmentSubmissions: {
+            none: {}
+          }
+        },
+        include: {
+          vendor: {
+            include: {
+              user: { select: { id: true, email: true } }
             }
           }
         },
-        orderBy: {
-          contractEndDate: 'asc'
-        }
+        take: 30
       });
 
-      console.log(`📊 Found ${expiringContracts.length} contracts expiring within 30 days`);
+      console.log(`📊 Found ${suppliers.length} suppliers with no assessments`);
 
-      for (const supplier of expiringContracts) {
-        try {
-          const daysLeft = Math.ceil(
-            (supplier.contractEndDate!.getTime() - today.getTime()) / (1000 * 60 * 60 * 24)
-          );
-
-          // Determine notification type and priority based on days left
-          let notificationType: NotificationType;
-          let priority: 'LOW' | 'MEDIUM' | 'HIGH';
-          
-          if (daysLeft <= 7) {
-            notificationType = 'CONTRACT_EXPIRY';
-            priority = 'HIGH';
-          } else if (daysLeft <= 15) {
-            notificationType = 'CONTRACT_EXPIRING_SOON';
-            priority = 'MEDIUM';
-          } else {
-            notificationType = 'CONTRACT_EXPIRING_SOON';
-            priority = 'LOW';
-          }
-
-          // ===============================
-          // 1️⃣ NOTIFICATION TO VENDOR
-          // ===============================
-          if (supplier.vendor?.user?.id) {
-            await this.sendContractNotificationToVendor(supplier, daysLeft, notificationType, priority);
-          }
-
-          // ===============================
-          // 2️⃣ NOTIFICATION TO SUPPLIER (if they have a user account)
-          // ===============================
-          if (supplier.user?.id) {
-            await this.sendContractNotificationToSupplier(supplier, daysLeft, notificationType, priority);
-          }
-
-        } catch (error) {
-          console.error(`❌ Error processing contract for supplier ${supplier.id}:`, error);
-        }
+      for (const supplier of suppliers) {
+        await this.sendNoAssessmentNotification(supplier);
       }
+
 
     } catch (error) {
-      console.error('❌ Error in checkExpiringContracts:', error);
+      console.error('❌ Error processing no-assessment suppliers:', error);
+
+      throw error;
     }
   }
 
-  // ========== SEND CONTRACT NOTIFICATION TO VENDOR (EXISTING) ==========
-  private async sendContractNotificationToVendor(
-    supplier: any, 
-    daysLeft: number, 
-    type: NotificationType, 
-    priority: 'LOW' | 'MEDIUM' | 'HIGH'
-  ) {
-    const vendorUserId = supplier.vendor.user.id;
-    
-    // Check if notification already sent in the last 3 days for this contract
-    const threeDaysAgo = new Date();
-    threeDaysAgo.setDate(threeDaysAgo.getDate() - 3);
-
-    const existingNotification = await prisma.notification.findFirst({
-      where: {
-        userId: vendorUserId,
-        type: type,
-        metadata: {
-          path: ['supplierId'],
-          equals: supplier.id
-        },
-        createdAt: {
-          gte: threeDaysAgo
-        }
-      }
-    });
-
-    if (existingNotification) {
-      console.log(`⏭️ Contract alert already sent recently to vendor for supplier: ${supplier.name}`);
-      return;
-    }
-
-    const urgency = daysLeft <= 7 ? 'URGENT' : 'UPCOMING';
-    const actionRequired = daysLeft <= 7 ? 'IMMEDIATE action required' : 'Plan for renewal';
-
-    await NotificationService.createNotification({
-      userId: vendorUserId,
-      title: `📅 Contract Expiry: ${supplier.name} (${daysLeft} days)`,
-      message: `Contract with "${supplier.name}" expires in ${daysLeft} day${daysLeft !== 1 ? 's' : ''}. ${actionRequired}.`,
-      type: type,
-      metadata: {
-        supplierId: supplier.id,
-        supplierName: supplier.name,
-        contractEndDate: supplier.contractEndDate!.toISOString(),
-        daysRemaining: daysLeft,
-        urgency: urgency,
-        vendorId: supplier.vendorId,
-        criticality: supplier.criticality,
-        riskLevel: supplier.riskLevel,
-        totalContractValue: supplier.totalContractValue,
-        contractDocument: supplier.contractDocument,
-        recommendedActions: [
-          'Initiate renewal process',
-          'Review performance metrics',
-          'Negotiate new terms if needed',
-          'Update vendor management system'
-        ]
-      },
-      priority: priority
-    });
-
-    console.log(`✅ Contract alert (${priority}) sent to VENDOR for supplier: ${supplier.name} (${daysLeft} days left)`);
-  }
-
-  // ========== SEND CONTRACT NOTIFICATION TO SUPPLIER (EXISTING) ==========
-  private async sendContractNotificationToSupplier(
-    supplier: any, 
-    daysLeft: number, 
-    type: NotificationType, 
-    priority: 'LOW' | 'MEDIUM' | 'HIGH'
-  ) {
-    const supplierUserId = supplier.user.id;
-    
-    // Check if notification already sent in the last 3 days
-    const threeDaysAgo = new Date();
-    threeDaysAgo.setDate(threeDaysAgo.getDate() - 3);
-
-    const existingNotification = await prisma.notification.findFirst({
-      where: {
-        userId: supplierUserId,
-        type: type,
-        metadata: {
-          path: ['supplierId'],
-          equals: supplier.id
-        },
-        createdAt: {
-          gte: threeDaysAgo
-        }
-      }
-    });
-
-    if (existingNotification) {
-      console.log(`⏭️ Contract alert already sent recently to supplier: ${supplier.name}`);
-      return;
-    }
-
-    const urgency = daysLeft <= 7 ? 'URGENT' : 'UPCOMING';
-    const action = daysLeft <= 7 ? 'Contact vendor immediately' : 'Prepare for renewal discussion';
-
-    await NotificationService.createNotification({
-      userId: supplierUserId,
-      title: `📝 Contract Expiry Notification (${daysLeft} days)`,
-      message: `Your contract with ${supplier.vendor?.companyName} expires in ${daysLeft} day${daysLeft !== 1 ? 's' : ''}. ${action}.`,
-      type: type,
-      metadata: {
-        supplierId: supplier.id,
-        supplierName: supplier.name,
-        vendorName: supplier.vendor?.companyName,
-        vendorEmail: supplier.vendor?.businessEmail,
-        contractEndDate: supplier.contractEndDate!.toISOString(),
-        daysRemaining: daysLeft,
-        urgency: urgency,
-        vendorId: supplier.vendorId,
-        contractStartDate: supplier.contractStartDate?.toISOString(),
-        contractDocument: supplier.contractDocument,
-        contactPerson: supplier.contactPerson,
-        recommendedActions: [
-          'Review contract terms',
-          'Prepare renewal documents',
-          'Contact vendor representative',
-          'Update your company information'
-        ]
-      },
-      priority: priority
-    });
-
-    console.log(`✅ Contract alert (${priority}) sent to SUPPLIER: ${supplier.name} (${daysLeft} days left)`);
-  }
-
-  // ========== SEND CONSOLIDATED RISK REPORT (EXISTING) ==========
-  private async sendConsolidatedRiskReport(highRiskSuppliers: any[]) {
+  // ========== SEND NO ASSESSMENT NOTIFICATION ==========
+  private async sendNoAssessmentNotification(supplier: any) {
     try {
-      // Group suppliers by vendor
-      const suppliersByVendor: Record<string, any[]> = {};
-      
-      highRiskSuppliers.forEach(supplier => {
-        if (supplier.vendor?.user?.id) {
-          if (!suppliersByVendor[supplier.vendor.user.id]) {
-            suppliersByVendor[supplier.vendor.user.id] = [];
+      const oneWeekAgo = new Date();
+      oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
+
+      if (supplier.vendor?.user?.id) {
+        const existingNotification = await prisma.notification.findFirst({
+          where: {
+            userId: supplier.vendor.user.id,
+            type: 'ASSESSMENT_DUE',
+            metadata: { path: ['supplierId'], equals: supplier.id },
+            createdAt: { gte: oneWeekAgo }
           }
-          suppliersByVendor[supplier.vendor.user.id].push(supplier);
-        }
-      });
+        });
 
-      // Send consolidated report to each vendor with 3+ high-risk suppliers
-      for (const [vendorUserId, vendorSuppliers] of Object.entries(suppliersByVendor)) {
-        if (vendorSuppliers.length >= 3) {
-          const highRiskCount = vendorSuppliers.filter(s => s.riskLevel === 'HIGH').length;
-          const criticalCount = vendorSuppliers.filter(s => s.riskLevel === 'CRITICAL').length;
-
+        if (!existingNotification) {
           await NotificationService.createNotification({
-            userId: vendorUserId,
-            title: `📊 Multiple High-Risk Suppliers Alert`,
-            message: `You have ${vendorSuppliers.length} high-risk suppliers (${criticalCount} CRITICAL, ${highRiskCount} HIGH). Immediate attention required.`,
-            type: 'RISK_ALERT',
-            metadata: {
-              totalHighRiskSuppliers: vendorSuppliers.length,
-              criticalCount: criticalCount,
-              highCount: highRiskCount,
-              suppliers: vendorSuppliers.map(s => ({
-                id: s.id,
-                name: s.name,
-                riskLevel: s.riskLevel,
-                overallScore: s.overallScore,
-                bivScore: s.bivScore,
-                complianceRate: s.complianceRate,
-                lastAssessmentDate: s.lastAssessmentDate?.toISOString()
-              })),
-              vendorId: vendorSuppliers[0].vendorId,
-              recommendation: 'Consider implementing enhanced monitoring or conducting risk mitigation workshops'
-            },
-            priority: 'HIGH'
+            userId: supplier.vendor.user.id,
+            title: `⚠️ No Assessments Started: ${supplier.name}`,
+            message: `Supplier "${supplier.name}" has not started any assessments.`,
+            type: 'ASSESSMENT_DUE',
+            priority: 'MEDIUM'
           });
-
-          console.log(`📋 Consolidated risk report sent to vendor: ${vendorSuppliers[0].vendor?.companyName}`);
         }
       }
-
     } catch (error) {
-      console.error('❌ Error sending consolidated risk report:', error);
+      console.error(`❌ Error sending no-assessment notification for supplier ${supplier.id}:`, error);
     }
   }
 
-  // ========== FIND SUPPLIERS WITH BOTH RISK AND EXPIRING CONTRACTS (EXISTING) ==========
-  async findCriticalSuppliers() {
+  // ========== PROCESS CRITICAL SUPPLIERS ==========
+  private async processCriticalSuppliers(data: any) {
+    console.log('🔴 Processing critical suppliers...');
+
     try {
       const today = new Date();
       const fifteenDaysFromNow = new Date();
       fifteenDaysFromNow.setDate(today.getDate() + 15);
 
-      // Find suppliers with BOTH high risk AND expiring contracts
       const criticalSuppliers = await prisma.supplier.findMany({
         where: {
           AND: [
-            {
-              riskLevel: {
-                in: ['HIGH']
-              }
-            },
+            { riskLevel: { in: ['HIGH', 'CRITICAL'] } },
             {
               contractEndDate: {
                 not: null,
@@ -547,712 +690,156 @@ export class ComprehensiveMonitorService {
             }
           ],
           isDeleted: false,
-          isActive: true,
-          vendor: {
-            isDeleted: false,
-            isActive: true
-          }
+          isActive: true
         },
         include: {
           vendor: {
             include: {
-              user: {
-                select: {
-                  id: true,
-                  email: true
-                }
-              }
+              user: { select: { id: true, email: true } }
             }
           },
-          user: {
-            select: {
-              id: true,
-              email: true
-            }
-          }
-        }
+          user: { select: { id: true, email: true } }
+        },
+        take: 20
       });
 
-      console.log(`🔴 Found ${criticalSuppliers.length} CRITICAL suppliers (High Risk + Expiring Contract)`);
+      console.log(`📊 Found ${criticalSuppliers.length} critical suppliers`);
 
-      // Send urgent alerts for these critical cases
       for (const supplier of criticalSuppliers) {
-        const daysLeft = Math.ceil(
-          (supplier.contractEndDate!.getTime() - today.getTime()) / (1000 * 60 * 60 * 24)
-        );
-
-        // Send to vendor
-        if (supplier.vendor?.user?.id) {
-          await NotificationService.createNotification({
-            userId: supplier.vendor.user.id,
-            title: `🚨 CRITICAL: ${supplier.name} - High Risk & Contract Expiring`,
-            message: `URGENT: Supplier "${supplier.name}" has ${supplier.riskLevel} risk level AND contract expires in ${daysLeft} days. Immediate action required.`,
-            type: 'RISK_ALERT',
-            metadata: {
-              supplierId: supplier.id,
-              supplierName: supplier.name,
-              riskLevel: supplier.riskLevel,
-              daysRemaining: daysLeft,
-              contractEndDate: supplier.contractEndDate!.toISOString(),
-              overallScore: supplier.overallScore,
-              vendorId: supplier.vendorId,
-              criticality: 'DOUBLE_ALERT',
-              requiredActions: [
-                'Schedule emergency review meeting',
-                'Prepare risk mitigation plan',
-                'Initiate contract renewal or termination',
-                'Update business continuity plans'
-              ]
-            },
-            priority: 'HIGH'
-          });
-        }
-
-        // Send to supplier if they have account
-        if (supplier.user?.id) {
-          await NotificationService.createNotification({
-            userId: supplier.user.id,
-            title: `⚠️ Urgent: Risk & Contract Review Required`,
-            message: `Your company has been flagged for ${supplier.riskLevel} risk level and contract expiry in ${daysLeft} days. Please contact vendor immediately.`,
-            type: 'RISK_ALERT',
-            metadata: {
-              supplierId: supplier.id,
-              supplierName: supplier.name,
-              riskLevel: supplier.riskLevel,
-              daysRemaining: daysLeft,
-              vendorName: supplier.vendor?.companyName,
-              vendorContact: supplier.vendor?.contactNumber,
-              recommendedActions: [
-                'Contact vendor representative immediately',
-                'Review and update compliance documents',
-                'Prepare risk mitigation plan',
-                'Schedule meeting for contract discussion'
-              ]
-            },
-            priority: 'HIGH'
-          });
-        }
+        await this.sendCriticalSupplierNotification(supplier);
       }
 
-      return criticalSuppliers;
+
+
     } catch (error) {
-      console.error('❌ Error finding critical suppliers:', error);
-      return [];
+      console.error('❌ Error processing critical suppliers:', error);
+
+      throw error;
     }
   }
 
-  // ========== NEW: CHECK INCOMPLETE ASSESSMENTS ==========
-  async checkIncompleteAssessments() {
+  // ========== SEND CRITICAL SUPPLIER NOTIFICATION ==========
+  private async sendCriticalSupplierNotification(supplier: any) {
     try {
-      console.log('🔄 Scanning for incomplete assessments...');
-      
-      // Find all suppliers with incomplete assessments
-      const suppliersWithIncompleteAssessments = await prisma.supplier.findMany({
-        where: {
-          isDeleted: false,
-          isActive: true,
-          invitationStatus: 'ACCEPTED', // Only accepted suppliers
-          vendor: {
-            isDeleted: false,
-            isActive: true
-          },
-          assessmentSubmissions: {
-            some: {
-              status: {
-                in: ['DRAFT', 'PENDING']
-              }
-            }
-          }
-        },
-        include: {
-          vendor: {
-            include: {
-              user: {
-                select: {
-                  id: true,
-                  email: true
-                }
-              }
-            }
-          },
-          user: {
-            select: {
-              id: true,
-              email: true
-            }
-          },
-          assessmentSubmissions: {
-            where: {
-              status: {
-                in: ['DRAFT', 'PENDING']
-              }
-            },
-            include: {
-              assessment: {
-                select: {
-                  id: true,
-                  title: true,
-                  stage: true
-                }
-              }
-            }
-          }
-        }
-      });
+      const today = new Date();
+      const daysLeft = Math.ceil(
+        (supplier.contractEndDate!.getTime() - today.getTime()) / (1000 * 60 * 60 * 24)
+      );
 
-      console.log(`📊 Found ${suppliersWithIncompleteAssessments.length} suppliers with incomplete assessments`);
-
-      for (const supplier of suppliersWithIncompleteAssessments) {
-        try {
-          const incompleteCount = supplier.assessmentSubmissions.length;
-          const initialIncomplete = supplier.assessmentSubmissions.filter(
-            sub => sub.stage === 'INITIAL' && sub.status !== 'PENDING'
-          ).length;
-          const fullIncomplete = supplier.assessmentSubmissions.filter(
-            sub => sub.stage === 'FULL' && sub.status !== 'PENDING'
-          ).length;
-
-          // ===============================
-          // 1️⃣ NOTIFICATION TO SUPPLIER
-          // ===============================
-          if (supplier.user?.id) {
-            await this.sendAssessmentReminderToSupplier(supplier, incompleteCount, initialIncomplete, fullIncomplete);
-          }
-
-          // ===============================
-          // 2️⃣ NOTIFICATION TO VENDOR
-          // ===============================
-          if (supplier.vendor?.user?.id) {
-            await this.sendAssessmentReminderToVendor(supplier, incompleteCount, initialIncomplete, fullIncomplete);
-          }
-
-        } catch (error) {
-          console.error(`❌ Error processing supplier ${supplier.id}:`, error);
-        }
+      // Send to vendor
+      if (supplier.vendor?.user?.id) {
+        await NotificationService.createNotification({
+          userId: supplier.vendor.user.id,
+          title: `🚨 CRITICAL: ${supplier.name}`,
+          message: `Supplier "${supplier.name}" has ${supplier.riskLevel} risk and contract expires in ${daysLeft} days.`,
+          type: 'RISK_ALERT',
+          priority: 'HIGH'
+        });
       }
 
+      // Send to supplier
+      if (supplier.user?.id) {
+        await NotificationService.createNotification({
+          userId: supplier.user.id,
+          title: `⚠️ Urgent Action Required`,
+          message: `Your company has ${supplier.riskLevel} risk and contract expires in ${daysLeft} days.`,
+          type: 'RISK_ALERT',
+          priority: 'HIGH'
+        });
+      }
     } catch (error) {
-      console.error('❌ Error in checkIncompleteAssessments:', error);
+      console.error(`❌ Error sending critical notification for supplier ${supplier.id}:`, error);
     }
   }
 
-  // ========== NEW: SEND ASSESSMENT REMINDER TO SUPPLIER ==========
-  private async sendAssessmentReminderToSupplier(
-    supplier: any, 
-    totalIncomplete: number, 
-    initialIncomplete: number, 
-    fullIncomplete: number
-  ) {
-    const supplierUserId = supplier.user.id;
-    
-    // Check if reminder already sent in last 2 days
-    const twoDaysAgo = new Date();
-    twoDaysAgo.setDate(twoDaysAgo.getDate() - 2);
+  // ========== MANUAL TRIGGER ==========
+  async manualTriggerCheck(type: string) {
+    const jobTypes: Record<string, string> = {
+      'high-risk': 'checkHighRiskSuppliers',
+      'contracts': 'checkExpiringContracts',
+      'assessments': 'checkIncompleteAssessments',
+      'critical': 'checkCriticalSuppliers',
+      'report': 'generateDailyReport'
+    };
 
-    const existingNotification = await prisma.notification.findFirst({
-      where: {
-        userId: supplierUserId,
-        type: 'ASSESSMENT_DUE',
-        createdAt: {
-          gte: twoDaysAgo
-        },
-        metadata: {
-          path: ['supplierId'],
-          equals: supplier.id
-        }
-      }
+    const jobName = jobTypes[type];
+    if (!jobName) {
+      throw new Error(`Invalid job type: ${type}`);
+    }
+
+    const job = await this.monitoringQueue.add(jobName, {
+      manualTrigger: true,
+      triggeredAt: new Date().toISOString()
+    }, {
+      priority: 1
     });
 
-    if (existingNotification) {
-      console.log(`⏭️ Assessment reminder already sent recently to supplier: ${supplier.name}`);
-      return;
-    }
-
-    // Prepare message based on assessment types
-    let message = '';
-    let priority: 'LOW' | 'MEDIUM' | 'HIGH' = 'MEDIUM';
-
-    if (initialIncomplete > 0 && fullIncomplete > 0) {
-      message = `You have ${totalIncomplete} incomplete assessments (${initialIncomplete} Initial, ${fullIncomplete} Full). Please complete them to maintain compliance.`;
-      priority = 'HIGH';
-    } else if (initialIncomplete > 0) {
-      message = `You have ${initialIncomplete} incomplete Initial Assessment(s). This is required to start working with ${supplier.vendor?.companyName}.`;
-      priority = 'HIGH';
-    } else if (fullIncomplete > 0) {
-      message = `You have ${fullIncomplete} incomplete Full Assessment(s). Complete them to improve your compliance rating.`;
-      priority = 'MEDIUM';
-    }
-
-    try {
-      await NotificationService.createNotification({
-        userId: supplierUserId,
-        title: `📝 Incomplete Assessments: ${totalIncomplete} pending`,
-        message: message,
-        type: 'ASSESSMENT_DUE',
-        metadata: {
-          supplierId: supplier.id,
-          supplierName: supplier.name,
-          totalIncompleteAssessments: totalIncomplete,
-          initialIncompleteCount: initialIncomplete,
-          fullIncompleteCount: fullIncomplete,
-          vendorId: supplier.vendorId,
-          vendorName: supplier.vendor?.companyName,
-          incompleteAssessments: supplier.assessmentSubmissions.map((sub: { id: any; assessmentId: any; assessment: { title: any; }; stage: any; status: any; progress: any; }) => ({
-            id: sub.id,
-            assessmentId: sub.assessmentId,
-            assessmentTitle: sub.assessment.title,
-            stage: sub.stage,
-            status: sub.status,
-            progress: sub.progress
-          })),
-          lastReminderSent: new Date().toISOString(),
-          recommendedActions: [
-            'Login to your dashboard',
-            'Complete pending assessments',
-            'Contact vendor for support if needed',
-            'Upload required evidence documents'
-          ]
-        },
-        priority: priority
-      });
-
-      console.log(`✅ Assessment reminder sent to SUPPLIER: ${supplier.name} (${totalIncomplete} incomplete)`);
-    } catch (error) {
-      console.error(`❌ Failed to send assessment reminder to supplier ${supplierUserId}:`, error);
-    }
+    return { jobId: job.id, name: jobName, status: 'queued' };
   }
 
-  // ========== NEW: SEND ASSESSMENT REMINDER TO VENDOR ==========
-  private async sendAssessmentReminderToVendor(
-    supplier: any, 
-    totalIncomplete: number, 
-    initialIncomplete: number, 
-    fullIncomplete: number
-  ) {
-    const vendorUserId = supplier.vendor.user.id;
-    
-    // Check if reminder already sent in last 3 days
-    const threeDaysAgo = new Date();
-    threeDaysAgo.setDate(threeDaysAgo.getDate() - 3);
+  // ========== GET QUEUE STATS ==========
+  async getQueueStats() {
+    const [
+      monitoringJobs,
+      monitoringWorkers,
+      highRiskJobs,
+      contractJobs,
+      assessmentJobs
+    ] = await Promise.all([
+      this.monitoringQueue.getJobCounts(),
+      this.monitoringQueue.getWorkers(),
+      this.highRiskQueue.getJobCounts(),
+      this.contractQueue.getJobCounts(),
+      this.assessmentQueue.getJobCounts()
+    ]);
 
-    const existingNotification = await prisma.notification.findFirst({
-      where: {
-        userId: vendorUserId,
-        type: 'ASSESSMENT_DUE',
-        createdAt: {
-          gte: threeDaysAgo
-        },
-        metadata: {
-          path: ['supplierId'],
-          equals: supplier.id
-        }
-      }
-    });
-
-    if (existingNotification) {
-      console.log(`⏭️ Assessment reminder already sent recently to vendor for supplier: ${supplier.name}`);
-      return;
-    }
-
-    // Determine urgency
-    let urgency = '';
-    let priority: 'LOW' | 'MEDIUM' | 'HIGH' = 'MEDIUM';
-
-    if (initialIncomplete > 0) {
-      urgency = 'Initial assessment not completed - supplier cannot start work';
-      priority = 'HIGH';
-    } else if (fullIncomplete > 0 && totalIncomplete >= 2) {
-      urgency = 'Multiple full assessments pending - compliance at risk';
-      priority = 'HIGH';
-    } else if (fullIncomplete > 0) {
-      urgency = 'Full assessment pending';
-      priority = 'MEDIUM';
-    }
-
-    try {
-      await NotificationService.createNotification({
-        userId: vendorUserId,
-        title: `📋 Supplier Assessment Status: ${supplier.name}`,
-        message: `Supplier "${supplier.name}" has ${totalIncomplete} incomplete assessment(s). ${urgency}`,
-        type: 'ASSESSMENT_DUE',
-        metadata: {
-          supplierId: supplier.id,
-          supplierName: supplier.name,
-          supplierEmail: supplier.email,
-          totalIncompleteAssessments: totalIncomplete,
-          initialIncompleteCount: initialIncomplete,
-          fullIncompleteCount: fullIncomplete,
-          vendorId: supplier.vendorId,
-          supplierRiskLevel: supplier.riskLevel,
-          supplierComplianceRate: supplier.complianceRate,
-          incompleteAssessments: supplier.assessmentSubmissions.map((sub: { id: any; assessmentId: any; assessment: { title: any; }; stage: any; status: any; progress: any; startedAt: { toISOString: () => any; }; }) => ({
-            id: sub.id,
-            assessmentId: sub.assessmentId,
-            assessmentTitle: sub.assessment.title,
-            stage: sub.stage,
-            status: sub.status,
-            progress: sub.progress,
-            startedAt: sub.startedAt?.toISOString()
-          })),
-          lastAssessmentDate: supplier.lastAssessmentDate?.toISOString(),
-          nextAssessmentDue: supplier.nextAssessmentDue?.toISOString(),
-          recommendedActions: [
-            'Contact supplier for follow-up',
-            'Review assessment progress',
-            'Consider sending reminder email',
-            'Update supplier risk profile if needed'
-          ]
-        },
-        priority: priority
-      });
-
-      console.log(`✅ Assessment reminder sent to VENDOR for supplier: ${supplier.name} (${totalIncomplete} incomplete)`);
-    } catch (error) {
-      console.error(`❌ Failed to send assessment reminder to vendor ${vendorUserId}:`, error);
-    }
-  }
-
-
-  // ========== NEW: CHECK SUPPLIERS WITH NO ASSESSMENTS ==========
-  async checkSuppliersWithNoAssessments() {
-    try {
-      console.log('🔄 Scanning for suppliers with no assessments...');
-      
-      const suppliersWithNoAssessments = await prisma.supplier.findMany({
-        where: {
-          isDeleted: false,
-          isActive: true,
-          invitationStatus: 'ACCEPTED',
-          assessmentSubmissions: {
-            none: {} // No assessment submissions
-          },
-          vendor: {
-            isDeleted: false,
-            isActive: true
-          }
-        },
-        include: {
-          vendor: {
-            include: {
-              user: {
-                select: {
-                  id: true,
-                  email: true
-                }
-              }
-            }
-          },
-          user: {
-            select: {
-              id: true,
-              email: true
-            }
-          }
-        }
-      });
-
-      console.log(`📊 Found ${suppliersWithNoAssessments.length} suppliers with no assessments`);
-
-      for (const supplier of suppliersWithNoAssessments) {
-        try {
-          // Get available assessments for this supplier
-          const availableAssessments = await prisma.assessment.findMany({
-            where: {
-              vendorId: supplier.vendorId,
-              isActive: true
-            },
-            select: {
-              id: true,
-              title: true,
-              stage: true
-            }
-          });
-
-          if (availableAssessments.length === 0) continue;
-
-          // ===============================
-          // NOTIFICATION TO VENDOR ONLY
-          // ===============================
-          if (supplier.vendor?.user?.id) {
-            await this.sendNoAssessmentNotificationToVendor(supplier, availableAssessments);
-          }
-
-        } catch (error) {
-          console.error(`❌ Error processing supplier ${supplier.id}:`, error);
-        }
-      }
-
-    } catch (error) {
-      console.error('❌ Error in checkSuppliersWithNoAssessments:', error);
-    }
-  }
-
-  // ========== NEW: SEND NO ASSESSMENT NOTIFICATION TO VENDOR ==========
-  private async sendNoAssessmentNotificationToVendor(supplier: any, availableAssessments: any[]) {
-    const vendorUserId = supplier.vendor.user.id;
-    
-    // Check if notification already sent in last week
-    const oneWeekAgo = new Date();
-    oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
-
-    const existingNotification = await prisma.notification.findFirst({
-      where: {
-        userId: vendorUserId,
-        type: 'ASSESSMENT_DUE',
-        createdAt: {
-          gte: oneWeekAgo
-        },
-        metadata: {
-          path: ['supplierId'],
-          equals: supplier.id
-        }
-      }
-    });
-
-    if (existingNotification) {
-      console.log(`⏭️ No-assessment notification already sent recently for supplier: ${supplier.name}`);
-      return;
-    }
-
-    try {
-      await NotificationService.createNotification({
-        userId: vendorUserId,
-        title: `⚠️ No Assessments Started: ${supplier.name}`,
-        message: `Supplier "${supplier.name}" has not started any assessments. ${availableAssessments.length} assessments are available.`,
-        type: 'ASSESSMENT_DUE',
-        metadata: {
-          supplierId: supplier.id,
-          supplierName: supplier.name,
-          supplierEmail: supplier.email,
-          daysSinceAcceptance: this.getDaysSince(supplier.invitationAcceptedAt),
-          availableAssessments: availableAssessments.map(assessment => ({
-            id: assessment.id,
-            title: assessment.title,
-            stage: assessment.stage
-          })),
-          vendorId: supplier.vendorId,
-          timestamp: new Date().toISOString(),
-          recommendedActions: [
-            'Send assessment reminder to supplier',
-            'Contact supplier directly',
-            'Check if assessments are assigned correctly',
-            'Verify supplier user account status'
-          ]
-        },
-        priority: 'MEDIUM'
-      });
-
-      console.log(`✅ No-assessment notification sent to VENDOR for supplier: ${supplier.name}`);
-    } catch (error) {
-      console.error(`❌ Failed to send no-assessment notification to vendor ${vendorUserId}:`, error);
-    }
-  }
-
-  // ========== HELPER: GET PREVIOUS RISK LEVEL ==========
-  private async getPreviousRiskLevel(supplierId: string): Promise<string | null> {
-    try {
-      // Get previous assessment submission with risk level
-      const previousSubmission = await prisma.assessmentSubmission.findFirst({
-        where: {
-          supplierId: supplierId,
-          status: 'PENDING',
-          riskLevel: {
-            not: null
-          }
-        },
-        orderBy: {
-          submittedAt: 'desc'
-        },
-        skip: 1, // Skip the most recent one
-        select: {
-          riskLevel: true
-        }
-      });
-
-      return previousSubmission?.riskLevel || null;
-    } catch (error) {
-      console.error(`Error getting previous risk level for supplier ${supplierId}:`, error);
-      return null;
-    }
-  }
-
-  // ========== HELPER: CHECK IF RISK INCREASED ==========
-  private isRiskIncreased(previousLevel: string | null, currentLevel: string): boolean {
-    if (!previousLevel) return false;
-
-    const riskOrder = ['LOW', 'MEDIUM', 'HIGH'];
-    const previousIndex = riskOrder.indexOf(previousLevel);
-    const currentIndex = riskOrder.indexOf(currentLevel);
-
-    return currentIndex > previousIndex && currentIndex !== -1 && previousIndex !== -1;
-  }
-
-  // ========== HELPER: GET DAYS SINCE DATE ==========
-  private getDaysSince(date: Date | null | undefined): number {
-    if (!date) return 0;
-    const now = new Date();
-    const diffTime = Math.abs(now.getTime() - date.getTime());
-    return Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-  }
-
-  // ========== MANUAL TRIGGER FUNCTIONS ==========
-  async manualCheckHighRiskSuppliers() {
-    console.log('🔧 Manual trigger: Checking high-risk suppliers');
-    return await this.checkHighRiskSuppliers();
-  }
-
-  async manualCheckExpiringContracts() {
-    console.log('🔧 Manual trigger: Checking expiring contracts');
-    return await this.checkExpiringContracts();
-  }
-
-  async manualFindCriticalSuppliers() {
-    console.log('🔧 Manual trigger: Finding critical suppliers');
-    return await this.findCriticalSuppliers();
-  }
-
-  async manualCheckIncompleteAssessments() {
-    console.log('🔧 Manual trigger: Checking incomplete assessments');
-    return await this.checkIncompleteAssessments();
-  }
-
-
-
-  async manualCheckNoAssessments() {
-    console.log('🔧 Manual trigger: Checking suppliers with no assessments');
-    return await this.checkSuppliersWithNoAssessments();
-  }
-
-  // ========== GET MONITORING STATUS ==========
-  getMonitoringStatus() {
     return {
-      riskMonitorRunning: this.riskCheckJob?.isCallbackRunning || false,
-      contractMonitorRunning: this.contractCheckJob?.isCallbackRunning || false,
-      assessmentReminderRunning: this.assessmentReminderJob?.isCallbackRunning || false,
-      riskUpdateMonitorRunning: this.riskUpdateJob?.isCallbackRunning || false,
-      riskSchedule: this.riskCheckJob?.cronTime?.source || 'Not running',
-      contractSchedule: this.contractCheckJob?.cronTime?.source || 'Not running',
-      assessmentSchedule: this.assessmentReminderJob?.cronTime?.source || 'Not running',
-      riskUpdateSchedule: this.riskUpdateJob?.cronTime?.source || 'Not running',
-      lastCheck: new Date().toISOString()
+      monitoringQueue: {
+        jobs: monitoringJobs,
+        workers: monitoringWorkers.length
+      },
+      highRiskQueue: highRiskJobs,
+      contractQueue: contractJobs,
+      assessmentQueue: assessmentJobs,
+      timestamp: new Date().toISOString()
     };
   }
 
-  // ========== GET COMPREHENSIVE STATS ==========
-  async getComprehensiveStats() {
-    try {
-      const today = new Date();
-      const thirtyDaysFromNow = new Date();
-      thirtyDaysFromNow.setDate(today.getDate() + 30);
-      
-      // FIX: Define fifteenDaysFromNow here
-      const fifteenDaysFromNow = new Date();
-      fifteenDaysFromNow.setDate(today.getDate() + 15);
-
-      const [
-        highRiskCount,
-        expiringCount,
-        incompleteAssessmentsCount,
-        noAssessmentsCount,
-        recentRiskUpdates,
-        criticalCount
-      ] = await Promise.all([
-        // High risk suppliers
-        prisma.supplier.count({
-          where: {
-            riskLevel: { in: ['HIGH', 'CRITICAL'] },
-            isDeleted: false,
-            isActive: true
-          }
-        }),
-        
-        // Expiring contracts (within 30 days)
-        prisma.supplier.count({
-          where: {
-            contractEndDate: {
-              not: null,
-              gte: today,
-              lte: thirtyDaysFromNow
-            },
-            isDeleted: false,
-            isActive: true
-          }
-        }),
-        
-        // Incomplete assessments
-        prisma.supplier.count({
-          where: {
-            isDeleted: false,
-            isActive: true,
-            invitationStatus: 'ACCEPTED',
-            assessmentSubmissions: {
-              some: {
-                status: {
-                  in: ['DRAFT', 'PENDING']
-                }
-              }
-            }
-          }
-        }),
-        
-        // No assessments started
-        prisma.supplier.count({
-          where: {
-            isDeleted: false,
-            isActive: true,
-            invitationStatus: 'ACCEPTED',
-            assessmentSubmissions: {
-              none: {}
-            }
-          }
-        }),
-        
-        // Recent risk updates (last 24 hours)
-        prisma.supplier.count({
-          where: {
-            updatedAt: {
-              gte: new Date(new Date().setHours(new Date().getHours() - 24))
-            },
-            riskLevel: { not: null },
-            isDeleted: false,
-            isActive: true
-          }
-        }),
-        
-        // Critical suppliers (high risk + expiring contracts within 15 days)
-        prisma.supplier.count({
-          where: {
-            AND: [
-              { riskLevel: { in: ['HIGH', 'CRITICAL'] } },
-              {
-                contractEndDate: {
-                  not: null,
-                  gte: today,
-                  lte: fifteenDaysFromNow
-                }
-              }
-            ],
-            isDeleted: false,
-            isActive: true
-          }
-        })
-      ]);
-
-      return {
-        highRiskSuppliers: highRiskCount,
-        expiringContracts: expiringCount,
-        incompleteAssessments: incompleteAssessmentsCount,
-        noAssessmentsStarted: noAssessmentsCount,
-        recentRiskUpdates: recentRiskUpdates,
-        criticalSuppliers: criticalCount,
-        lastUpdated: new Date().toISOString()
-      };
-    } catch (error) {
-      console.error('❌ Error getting comprehensive stats:', error);
+  // ========== GET JOB DETAILS ==========
+  async getJobDetails(jobId: string) {
+    const job = await this.monitoringQueue.getJob(jobId);
+    if (!job) {
       return null;
     }
+
+    const state = await job.getState();
+    const progress = job.progress;
+
+    return {
+      id: job.id,
+      name: job.name,
+      data: job.data,
+      state,
+      progress,
+      attemptsMade: job.attemptsMade,
+      failedReason: job.failedReason,
+      returnvalue: job.returnvalue,
+      timestamp: job.timestamp,
+      processedOn: job.processedOn,
+      finishedOn: job.finishedOn
+    };
+  }
+
+  // ========== CLEANUP ==========
+  async cleanup() {
+    console.log('🧹 Cleaning up monitoring queues...');
+
+    await this.monitoringQueue.close();
+    await this.highRiskQueue.close();
+    await this.contractQueue.close();
+    await this.assessmentQueue.close();
+    await this.queueEvents.close();
+
+    console.log('✅ Monitoring queues closed');
   }
 }
-
-// Export singleton instance
-export const comprehensiveMonitorService = new ComprehensiveMonitorService();

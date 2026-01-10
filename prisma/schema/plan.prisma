@@ -1,18 +1,18 @@
 model Plan {
-  id              String       @id @default(uuid())
-  name            String
-  description     String?
-  type            PlanType     @default(STARTER)
-  billingCycle    BillingCycle @default(MONTHLY) @map("billing_cycle")
-  price           Decimal      @db.Decimal(10, 2)
+  id           String       @id @default(uuid())
+  name         String
+  description  String?
+  type         PlanType     @default(STARTER)
+  billingCycle BillingCycle @default(MONTHLY) @map("billing_cycle")
+  price        Decimal      @db.Decimal(10, 2)
 
-  currency        String       @default("EUR")
-  supplierLimit   Int?         @default(10) @map("supplier_limit")
-  assessmentLimit Int?         @default(100) @map("assessment_limit")
-  storageLimit    Int?         @default(10) @map("storage_limit")
-  userLimit       Int?         @default(5) @map("user_limit")
+  currency        String @default("EUR")
+  supplierLimit   Int?   @default(10) @map("supplier_limit")
+  assessmentLimit Int?   @default(100) @map("assessment_limit")
+  storageLimit    Int?   @default(10) @map("storage_limit")
+  userLimit       Int?   @default(5) @map("user_limit")
   features        Json
-  trialDays       Int          @default(14) @map("trial_days")
+  trialDays       Int    @default(14) @map("trial_days")
 
   originalPrice Decimal? @map("original_price") @db.Decimal(10, 2)
   isPopular     Boolean  @default(false) @map("is_popular")
@@ -65,8 +65,12 @@ model Subscription {
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
+  //new add 
+  lastRenewalReminderAt DateTime? @map("last_renewal_reminder_at")
+  renewalReminderCount  Int       @default(0) @map("renewal_reminder_count")
+
   payments            Payment[]
-  PlanLimitData           PlanLimitData?
+  PlanLimitData       PlanLimitData?
   planChangeHistories PlanChangeHistory[]
 
   @@index([userId])

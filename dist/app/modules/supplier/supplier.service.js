@@ -453,7 +453,7 @@ exports.SupplierService = {
                 vendorId,
                 invitationToken,
                 invitationSentAt: new Date(),
-                invitationStatus: client_1.InvitationStatus.SENT, // FIX: Use enum value instead of string
+                invitationStatus: client_1.InvitationStatus.SENT,
                 isActive: false
             };
             const supplier = yield prisma_1.prisma.supplier.create({

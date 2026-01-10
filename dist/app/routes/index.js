@@ -39,7 +39,7 @@ const moduleRoutes = [
     {
         path: '/usage',
         route: usage_routes_1.UsageRoutes
-    },
+    }
 ];
 moduleRoutes.forEach(route => router.use(route.path, route.route));
 exports.default = router;

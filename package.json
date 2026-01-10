@@ -20,6 +20,7 @@
     "@types/multer": "^2.0.0",
     "@types/pdfkit": "^0.17.4",
     "bcryptjs": "^3.0.3",
+    "bullmq": "^5.66.4",
     "cloudinary": "^2.8.0",
     "cookie-parser": "^1.4.7",
     "corn": "^0.0.1",
@@ -30,6 +31,7 @@
     "express-rate-limit": "^8.2.1",
     "fs": "^0.0.1-security",
     "http-status": "^2.1.0",
+    "ioredis": "^5.9.1",
     "jsonwebtoken": "^9.0.3",
     "mailtrap": "^4.4.0",
     "minio": "^8.0.6",
@@ -40,6 +42,7 @@
     "redis": "^5.10.0",
     "stripe": "^20.1.0",
     "uuidv4": "^6.2.13",
+    "winston": "^3.19.0",
     "zod": "^4.2.1"
   },
   "devDependencies": {
@@ -48,6 +51,7 @@
     "@types/express": "^5.0.3",
     "@types/minio": "^7.1.1",
     "@types/node": "^24.5.0",
+    "@types/winston": "^2.4.4",
     "prisma": "^6.16.3",
     "ts-node-dev": "^2.0.0",
     "typescript": "^5.9.2"

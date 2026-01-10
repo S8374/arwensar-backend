@@ -9,9 +9,11 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
     });
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.connectRedis = exports.redisClient = void 0;
+exports.getRedisUrl = exports.getBullMQConnection = exports.connectRedis = exports.redisClient = void 0;
+// src/app/shared/redis.ts
 const redis_1 = require("redis");
 const config_1 = require("../../config");
+// Create Redis client
 exports.redisClient = (0, redis_1.createClient)({
     username: config_1.config.REDIS.USERNAME,
     password: config_1.config.REDIS.PASSWORD,
@@ -21,13 +23,35 @@ exports.redisClient = (0, redis_1.createClient)({
     }
 });
 exports.redisClient.on('error', err => console.log('Redis Client Error', err));
-// await client.set('foo', 'bar');
-// const result = await client.get('foo');
-// console.log(result)  // >>> bar
 const connectRedis = () => __awaiter(void 0, void 0, void 0, function* () {
     if (!exports.redisClient.isOpen) {
         yield exports.redisClient.connect();
-        console.log("Redis Connected");
+        console.log("✅ Redis Connected");
     }
+    return exports.redisClient;
 });
 exports.connectRedis = connectRedis;
+// BullMQ connection configuration
+const getBullMQConnection = () => {
+    return {
+        host: config_1.config.REDIS.HOST,
+        port: Number(config_1.config.REDIS.PORT),
+        username: config_1.config.REDIS.USERNAME,
+        password: config_1.config.REDIS.PASSWORD,
+        enableReadyCheck: false,
+        maxRetriesPerRequest: null,
+        retryStrategy: (times) => {
+            return Math.min(times * 50, 2000);
+        }
+    };
+};
+exports.getBullMQConnection = getBullMQConnection;
+// Get Redis URL for BullMQ
+const getRedisUrl = () => {
+    const { USERNAME, PASSWORD, HOST, PORT } = config_1.config.REDIS;
+    if (USERNAME && PASSWORD) {
+        return `redis://${USERNAME}:${PASSWORD}@${HOST}:${PORT}`;
+    }
+    return `redis://${HOST}:${PORT}`;
+};
+exports.getRedisUrl = getRedisUrl;

@@ -1,30 +1,29 @@
-
 model Assessment {
-  id          String    @id @default(uuid())
-  examId      String    @unique @map("exam_id")
+  id          String  @id @default(uuid())
+  examId      String  @unique @map("exam_id")
   title       String
   description String?
 
-  isActive    Boolean   @default(true) @map("is_active")
-  isTemplate  Boolean   @default(false) @map("is_template")
-  stage       AssessmentStage @default(FULL) @map("stage")
+  isActive   Boolean         @default(true) @map("is_active")
+  isTemplate Boolean         @default(false) @map("is_template")
+  stage      AssessmentStage @default(FULL) @map("stage")
 
-  version     String    @default("1.0")
-  totalPoints Int       @default(100) @map("total_points")
-  passingScore Decimal? @db.Decimal(5, 2) @map("passing_score")
-  timeLimit   Int?      @map("time_limit")
+  version      String   @default("1.0")
+  totalPoints  Int      @default(100) @map("total_points")
+  passingScore Decimal? @map("passing_score") @db.Decimal(5, 2)
+  timeLimit    Int?     @map("time_limit")
 
   // FIX: Add the createdBy field here
-  createdBy   String    @map("created_by")
-  updatedBy   String?   @map("updated_by")
+  createdBy String  @map("created_by")
+  updatedBy String? @map("updated_by")
 
-  createdAt   DateTime  @default(now()) @map("created_at")
-  updatedAt   DateTime  @updatedAt @map("updated_at")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
 
   // FIX: Update the relation to reference the createdBy field
-  createdByUser User    @relation("UserCreatedAssessments", fields: [createdBy], references: [id])
+  createdByUser User @relation("UserCreatedAssessments", fields: [createdBy], references: [id])
 
-  vendorId    String    @map("vendor_id")
+  vendorId String @map("vendor_id")
 
   categories  AssessmentCategory[]
   submissions AssessmentSubmission[]
@@ -37,6 +36,7 @@ model Assessment {
   @@index([stage])
   @@map("assessments")
 }
+
 model AssessmentCategory {
   id          String   @id @default(uuid())
   categoryId  String   @map("category_id")
@@ -119,20 +119,21 @@ model AssessmentSubmission {
   riskComponents    Json?        @map("risk_components")
   riskBreakdown     Json?        @map("risk_breakdown")
   riskMetadata      Json?        @map("risk_metadata")
- 
- // ADD THESE NEW FIELDS
-  complianceRate      Decimal?         @db.Decimal(5, 2) @map("compliance_rate")
-  evidenceStatus      String?          @map("evidence_status") // OVERALL, PARTIAL, NONE
-  
+
+  // ADD THESE NEW FIELDS
+  complianceRate Decimal? @map("compliance_rate") @db.Decimal(5, 2)
+  evidenceStatus String?  @map("evidence_status") // OVERALL, PARTIAL, NONE
+
   startedAt   DateTime? @map("started_at")
   submittedAt DateTime? @map("submitted_at")
   reviewedAt  DateTime? @map("reviewed_at")
   createdAt   DateTime  @default(now()) @map("created_at")
   updatedAt   DateTime  @updatedAt @map("updated_at")
 
-  reviewedBy     String? @map("reviewed_by")
-  reviewComments String? @map("review_comments")
-  reviewerReport String? @map("reviewer_report")
+
+  reviewedBy     String?   @map("reviewed_by")
+  reviewComments String?   @map("review_comments")
+  reviewerReport String?   @map("reviewer_report")
 
   answers AssessmentAnswer[]
 

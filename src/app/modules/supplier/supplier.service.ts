@@ -85,15 +85,15 @@ export interface SupplierDashboardStats {
     slaBreaches: number;
     byType: Record<string, number>;
   };
-myVendor: {
-  id: string;
-  companyName: string;
-  email: string;                // ✅ normalized
-  contactNumber: string;
-  industryType: string;
-  companyLogo?: string | null;
-  isActive: boolean;
-} | null;
+  myVendor: {
+    id: string;
+    companyName: string;
+    email: string;                // ✅ normalized
+    contactNumber: string;
+    industryType: string;
+    companyLogo?: string | null;
+    isActive: boolean;
+  } | null;
 
 
   // Recent activity
@@ -171,8 +171,8 @@ export const SupplierService = {
             contactNumber: true,
             businessEmail: true,
             industryType: true,   // ✅ ADD
-        companyLogo: true,    // ✅ ADD
-        isActive: true        // ✅ ADD
+            companyLogo: true,    // ✅ ADD
+            isActive: true        // ✅ ADD
           }
         },
         assessmentSubmissions: {
@@ -507,28 +507,28 @@ export const SupplierService = {
         isActive: supplier.isActive,
         nis2Compliant: false
       },
-myVendor:
-  supplier.user?.vendorProfile
-    ? {
-        id: supplier.user.vendorProfile.id,
-        companyName: supplier.user.vendorProfile.companyName,
-        email: supplier.user.email, // USER email
-        contactNumber: supplier.user.vendorProfile.contactNumber,
-        industryType: supplier.user.vendorProfile.industryType,
-        companyLogo: supplier.user.vendorProfile.companyLogo,
-        isActive: supplier.user.vendorProfile.isActive
-      }
-    : supplier.vendor
-    ? {
-        id: supplier.vendor.id,
-        companyName: supplier.vendor.companyName,
-        email: supplier.vendor.businessEmail, // fallback
-        contactNumber: supplier.vendor.contactNumber,
-        industryType: supplier.vendor.industryType,
-        companyLogo: supplier.vendor.companyLogo,
-        isActive: supplier.vendor.isActive
-      }
-    : null,
+      myVendor:
+        supplier.user?.vendorProfile
+          ? {
+            id: supplier.user.vendorProfile.id,
+            companyName: supplier.user.vendorProfile.companyName,
+            email: supplier.user.email, // USER email
+            contactNumber: supplier.user.vendorProfile.contactNumber,
+            industryType: supplier.user.vendorProfile.industryType,
+            companyLogo: supplier.user.vendorProfile.companyLogo,
+            isActive: supplier.user.vendorProfile.isActive
+          }
+          : supplier.vendor
+            ? {
+              id: supplier.vendor.id,
+              companyName: supplier.vendor.companyName,
+              email: supplier.vendor.businessEmail, // fallback
+              contactNumber: supplier.vendor.contactNumber,
+              industryType: supplier.vendor.industryType,
+              companyLogo: supplier.vendor.companyLogo,
+              isActive: supplier.vendor.isActive
+            }
+            : null,
 
 
 
@@ -632,7 +632,7 @@ myVendor:
       vendorId,
       invitationToken,
       invitationSentAt: new Date(),
-      invitationStatus: InvitationStatus.SENT, // FIX: Use enum value instead of string
+      invitationStatus: InvitationStatus.SENT, 
       isActive: false
     };
 
@@ -648,6 +648,7 @@ myVendor:
         }
       }
     });
+
 
     // Send invitation email
     try {

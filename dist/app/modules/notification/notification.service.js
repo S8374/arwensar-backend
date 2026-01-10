@@ -796,6 +796,7 @@ exports.NotificationService = {
             case 'RISK_ALERT':
                 return preferences.riskAlerts;
             case 'CONTRACT_EXPIRY':
+                return preferences.contractReminders;
             case 'CONTRACT_EXPIRING_SOON':
                 return preferences.contractReminders;
             case 'ASSESSMENT_DUE':

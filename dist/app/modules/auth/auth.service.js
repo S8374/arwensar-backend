@@ -827,6 +827,7 @@ exports.AuthService = {
                             plan: {
                                 select: {
                                     name: true,
+                                    id: true,
                                     features: true,
                                 },
                             },
