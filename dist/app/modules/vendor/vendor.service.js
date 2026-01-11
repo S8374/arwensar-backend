@@ -509,15 +509,20 @@ exports.VendorService = {
         // Define compliance criteria
         const compliantSuppliers = suppliers.filter(supplier => {
             // Check if supplier has at least one approved assessment
-            const hasApprovedAssessments = assessments.some(a => a.supplierId === supplier.id && a.status === 'APPROVED');
+            // const hasApprovedAssessments = assessments.some(a =>
+            //   a.supplierId === supplier.id && a.status === 'APPROVED'
+            // );
             // Check if supplier has active problems
-            const hasActiveProblems = problems.some(p => p.supplierId === supplier.id && p.status !== 'RESOLVED');
+            console.log("Problem", problems);
+            const hasActiveProblems = problems.some(p => p.supplierId === supplier.id && p.status == 'IN_PROGRESS' && p.status == 'OPEN');
+            console.log("sendedAlertNotifications", sendedAlertNotifications);
             // Check if supplier has at least one notification sent
             const hasSentNotifications = sendedAlertNotifications.some(n => { var _a; return ((_a = n.metadata) === null || _a === void 0 ? void 0 : _a.supplierId) === supplier.id; });
             // Return true only if all conditions are satisfied
-            return hasApprovedAssessments || !hasActiveProblems || hasSentNotifications;
+            return hasActiveProblems || hasSentNotifications;
         }).length;
         console.log("Compliant Suppliers Count:", compliantSuppliers);
+        console.log("Total Supplier:", suppliers.length);
         const nonCompliantSuppliers = suppliers.length - compliantSuppliers;
         // const compliancePercentage = suppliers.length > 50 ?
         //   (compliantSuppliers / suppliers.length) * 100 : 0;

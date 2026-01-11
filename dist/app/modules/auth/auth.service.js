@@ -826,6 +826,8 @@ exports.AuthService = {
                             status: true,
                             plan: {
                                 select: {
+                                    supplierLimit: true,
+                                    assessmentLimit: true,
                                     name: true,
                                     id: true,
                                     features: true,

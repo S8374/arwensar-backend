@@ -62,7 +62,7 @@ export interface VendorDashboardStats {
   contractStats: {
     expiringContracts: number;
     expiredContracts: number;
-    totalContract : number ;
+    totalContract: number;
     recentExpirations: Array<{
       id: string;
       supplierName: string;
@@ -389,7 +389,7 @@ export const VendorService = {
 
 
     // ========== CALCULATE CONTRACT STATS ==========
-    const contractStats = this.calculateContractStats(contracts, today , suppliers);
+    const contractStats = this.calculateContractStats(contracts, today, suppliers);
 
     // ========== CALCULATE COMPLIANCE OVERVIEW ==========
     const complianceOverview = this.calculateComplianceOverview(suppliers);
@@ -612,7 +612,7 @@ export const VendorService = {
     };
   },
   // ========== CALCULATE CONTRACT STATS ==========
-calculateContractStats(contracts: any[], today: Date, suppliers: any[]) {
+  calculateContractStats(contracts: any[], today: Date, suppliers: any[]) {
     const thirtyDaysFromNow = new Date(today);
     thirtyDaysFromNow.setDate(thirtyDaysFromNow.getDate() + 30);
 
@@ -632,7 +632,7 @@ calculateContractStats(contracts: any[], today: Date, suppliers: any[]) {
     const activeContracts = contractsWithEndDate.filter(c =>
       c.contractEndDate > thirtyDaysFromNow
     );
-  
+
 
     // const contractsByStatus = {
     //   active: activeContracts.length,
@@ -651,7 +651,7 @@ calculateContractStats(contracts: any[], today: Date, suppliers: any[]) {
         const daysRemaining = Math.ceil(
           (c.contractEndDate!.getTime() - today.getTime()) / (1000 * 60 * 60 * 24)
         );
-           // Find supplier details
+        // Find supplier details
         const supplier = suppliers.find(s => s.id === c.supplierId) || {};
         return {
           id: c.id,
@@ -678,11 +678,11 @@ calculateContractStats(contracts: any[], today: Date, suppliers: any[]) {
         const daysExpired = Math.ceil(
           (today.getTime() - c.contractEndDate!.getTime()) / (1000 * 60 * 60 * 24)
         );
-        
+
         // Find supplier details
         const supplier = suppliers.find(s => s.id === c.supplierId) || {};
-        
-        
+
+
         return {
           id: c.id,
           supplierId: c.supplierId,
@@ -717,19 +717,19 @@ calculateContractStats(contracts: any[], today: Date, suppliers: any[]) {
       // Summary statistics
       expiringContracts: expiringContracts.length,
       expiredContracts: expiredContracts.length,
-      totalContract : contracts.length,
-      
+      totalContract: contracts.length,
+
       // Detailed lists
       recentExpirations,     // Contracts expiring soon
       expiredContractsDetails, // Expired contracts with details      
-   
-    
-    
-  // Risk analysis
-      highRiskExpired: expiredContracts.filter(c => 
+
+
+
+      // Risk analysis
+      highRiskExpired: expiredContracts.filter(c =>
         c.criticality === 'HIGH' || c.criticality === 'CRITICAL'
       ).length,
-      overdueRenewals: expiredContracts.filter(c => 
+      overdueRenewals: expiredContracts.filter(c =>
         daysExpired(c.contractEndDate) > 30
       ).length
     };
@@ -753,7 +753,7 @@ calculateContractStats(contracts: any[], today: Date, suppliers: any[]) {
 
 
 
-  
+
   // ========== CALCULATE COMPLIANCE OVERVIEW ==========
   calculateComplianceOverview(suppliers: any[]) {
     const riskDistribution = {
@@ -806,15 +806,17 @@ calculateContractStats(contracts: any[], today: Date, suppliers: any[]) {
     // Define compliance criteria
     const compliantSuppliers = suppliers.filter(supplier => {
       // Check if supplier has at least one approved assessment
-      const hasApprovedAssessments = assessments.some(a =>
-        a.supplierId === supplier.id && a.status === 'APPROVED'
-      );
+      // const hasApprovedAssessments = assessments.some(a =>
+      //   a.supplierId === supplier.id && a.status === 'APPROVED'
+      // );
       // Check if supplier has active problems
+
+      console.log("Problem", problems);
       const hasActiveProblems = problems.some(p =>
-        p.supplierId === supplier.id && p.status !== 'RESOLVED'
+        p.supplierId === supplier.id && p.status == 'IN_PROGRESS' && p.status == 'OPEN'
       );
 
-
+      console.log("sendedAlertNotifications", sendedAlertNotifications);
 
       // Check if supplier has at least one notification sent
       const hasSentNotifications = sendedAlertNotifications.some(n =>
@@ -822,10 +824,11 @@ calculateContractStats(contracts: any[], today: Date, suppliers: any[]) {
       );
 
       // Return true only if all conditions are satisfied
-      return hasApprovedAssessments || !hasActiveProblems || hasSentNotifications;
+      return hasActiveProblems || hasSentNotifications;
     }).length;
 
     console.log("Compliant Suppliers Count:", compliantSuppliers);
+    console.log("Total Supplier:", suppliers.length);
 
 
     const nonCompliantSuppliers = suppliers.length - compliantSuppliers;

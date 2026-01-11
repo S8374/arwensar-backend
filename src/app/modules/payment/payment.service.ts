@@ -11,7 +11,6 @@ import { getPlanFeatures } from "../../helper/getFeatures";
 export interface CheckoutSessionResponse {
   url: string;
   sessionId: string;
-  subscriptionId: string;
 }
 
 export interface PaymentHistory {
@@ -52,6 +51,134 @@ export const PaymentService = {
   },
 
   // ========== CREATE CHECKOUT SESSION ==========
+  // async createCheckoutSession(
+  //   userId: string,
+  //   planId: string,
+  //   billingCycle: BillingCycle = 'MONTHLY'
+  // ): Promise<CheckoutSessionResponse> {
+  //   const user = await prisma.user.findUnique({
+  //     where: { id: userId },
+  //     include: { vendorProfile: true }
+  //   });
+
+  //   if (!user || !user.vendorProfile) {
+  //     throw new ApiError(httpStatus.NOT_FOUND, "User or vendor profile not found");
+  //   }
+
+  //   const vendor = user.vendorProfile;
+  //   const plan = await this.getPlanById(planId);
+
+  //   if (!plan || !plan.stripePriceId) {
+  //     throw new ApiError(httpStatus.NOT_FOUND, "Plan not found or not configured for Stripe");
+  //   }
+
+  //   const existingSubscription = await prisma.subscription.findUnique({
+  //     where: { userId }
+  //   });
+
+  //   // Block same plan
+  //   if (
+  //     existingSubscription &&
+  //     existingSubscription.planId === planId &&
+  //     existingSubscription.billingCycle === billingCycle &&
+  //     ['ACTIVE', 'TRIALING', 'PAST_DUE'].includes(existingSubscription.status)
+  //   ) {
+  //     throw new ApiError(httpStatus.BAD_REQUEST, "You are already on this plan.");
+  //   }
+
+  //   // Get/create customer
+  //   let stripeCustomerId = vendor.stripeCustomerId;
+  //   if (!stripeCustomerId) {
+  //     const customer = await stripeService.createCustomer(user.email, vendor.companyName, {
+  //       userId: user.id,
+  //       vendorId: vendor.id,
+  //     });
+  //     stripeCustomerId = customer.id;
+  //     await prisma.vendor.update({
+  //       where: { id: vendor.id },
+  //       data: { stripeCustomerId }
+  //     });
+  //   }
+
+  //   const isPlanChange = !!existingSubscription && existingSubscription.planId !== planId;
+
+  //   const subscription = await prisma.subscription.upsert({
+  //     where: { userId },
+  //     update: {
+  //       planId: plan.id,
+  //       billingCycle,
+  //       status: 'PENDING',
+  //       stripeCustomerId,
+  //       // No trial for paid plans - payment required immediately
+  //       trialEnd: null,
+  //       trialStart: null,
+  //     },
+  //     create: {
+  //       userId,
+  //       planId: plan.id,
+  //       billingCycle,
+  //       status: 'PENDING',
+  //       stripeCustomerId,
+  //       // No trial for paid plans - payment required immediately
+  //       trialEnd: null,
+  //       trialStart: null,
+  //     }
+  //   });
+
+  //   // Build session metadata
+  //   const metadata: any = {
+  //     userId: user.id,
+  //     vendorId: vendor.id,
+  //     planId: plan.id,
+  //     subscriptionId: subscription.id,
+  //     planName: plan.name,
+  //     billingCycle,
+  //     isPlanChange: isPlanChange.toString(),
+  //   };
+
+  //   // Add previous subscription info for plan changes
+  //   if (isPlanChange && existingSubscription) {
+  //     metadata.previousPlanId = existingSubscription.planId;
+  //     metadata.previousSubscriptionId = existingSubscription.id;
+  //     metadata.previousStripeSubscriptionId = existingSubscription.stripeSubscriptionId;
+  //     metadata.previousBillingCycle = existingSubscription.billingCycle;
+  //   }
+
+  //   // Build checkout session - ALWAYS require payment
+  //   const session = await stripeService.stripe.checkout.sessions.create({
+  //     customer: stripeCustomerId,
+  //     mode: 'subscription',
+  //     line_items: [{ price: plan.stripePriceId, quantity: 1 }],
+  //     metadata,
+  //     success_url: `${config.FRONTEND_URL}/payment/success?session_id={CHECKOUT_SESSION_ID}`,
+  //     cancel_url: `${config.FRONTEND_URL}/pricing`,
+  //     billing_address_collection: 'required',
+  //     allow_promotion_codes: true,
+  //     payment_method_types: ['card'],
+  //     payment_method_collection: 'always',
+  //   });
+
+  //   await prisma.subscription.update({
+  //     where: { id: subscription.id },
+  //     data: { stripeSessionId: session.id }
+  //   });
+
+  //   return {
+  //     url: session.url!,
+  //     sessionId: session.id,
+  //     subscriptionId: subscription.id,
+  //   };
+  // },
+
+
+
+
+
+
+
+
+
+
   async createCheckoutSession(
     userId: string,
     planId: string,
@@ -103,35 +230,13 @@ export const PaymentService = {
 
     const isPlanChange = !!existingSubscription && existingSubscription.planId !== planId;
 
-    const subscription = await prisma.subscription.upsert({
-      where: { userId },
-      update: {
-        planId: plan.id,
-        billingCycle,
-        status: 'PENDING',
-        stripeCustomerId,
-        // No trial for paid plans - payment required immediately
-        trialEnd: null,
-        trialStart: null,
-      },
-      create: {
-        userId,
-        planId: plan.id,
-        billingCycle,
-        status: 'PENDING',
-        stripeCustomerId,
-        // No trial for paid plans - payment required immediately
-        trialEnd: null,
-        trialStart: null,
-      }
-    });
+
 
     // Build session metadata
     const metadata: any = {
       userId: user.id,
       vendorId: vendor.id,
       planId: plan.id,
-      subscriptionId: subscription.id,
       planName: plan.name,
       billingCycle,
       isPlanChange: isPlanChange.toString(),
@@ -159,17 +264,45 @@ export const PaymentService = {
       payment_method_collection: 'always',
     });
 
-    await prisma.subscription.update({
-      where: { id: subscription.id },
-      data: { stripeSessionId: session.id }
-    });
+  
 
     return {
       url: session.url!,
       sessionId: session.id,
-      subscriptionId: subscription.id,
     };
   },
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
   // ========== GET SESSION STATUS ==========
   async getSessionStatus(sessionId: string): Promise<any> {

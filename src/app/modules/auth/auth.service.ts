@@ -974,8 +974,12 @@ async getMe(userId: string): Promise<any> {
       subscription: {
         select: {
           status: true,
+          
           plan: {
+
             select: {
+              supplierLimit : true ,
+              assessmentLimit : true,
               name: true,
               id : true ,
               features: true,
