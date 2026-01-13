@@ -228,8 +228,8 @@ const bulkImportSuppliers = catchAsync(async (req: Request & { user?: any }, res
   console.log("Processing bulk import request");
 
   const vendorId = req.user.vendorId;
-
-  if (!vendorId) {
+  const userId = req.user.userId;
+  if (!vendorId && !userId) {
     return sendResponse(res, {
       statusCode: httpStatus.BAD_REQUEST,
       success: false,
@@ -252,7 +252,7 @@ const bulkImportSuppliers = catchAsync(async (req: Request & { user?: any }, res
   // (req as any).bulkCount = req.body.suppliers.length;
   // Check capacity before processing
   const capacityCheck = await usageService.checkBulkSupplierLimit(
-    vendorId,
+    userId,
     req.body.suppliers.length
   );
   if (!capacityCheck.canProceed) {
@@ -261,7 +261,7 @@ const bulkImportSuppliers = catchAsync(async (req: Request & { user?: any }, res
 
   // Decrement usage for all suppliers
   await usageService.decrementUsage(
-    vendorId,
+    userId,
     'suppliersUsed',
     req.body.suppliers.length
   );

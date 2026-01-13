@@ -566,6 +566,87 @@ exports.NotificationService = {
         });
     },
     // ========== HELPER METHOD: BUILD ROLE-BASED WHERE CLAUSE ==========
+    // async buildRoleBasedWhereClause(userId: string): Promise<any> {
+    //   const user = await prisma.user.findUnique({
+    //     where: { id: userId },
+    //     select: { role: true, vendorId: true, supplierId: true }
+    //   });
+    //   if (!user) {
+    //     return { userId };
+    //   }
+    //   const where: any = { isDeleted: false };
+    //   switch (user.role) {
+    //     case 'ADMIN':
+    //       // Admin can see all - no additional filtering
+    //       break;
+    //     case 'VENDOR':
+    //       if (user.vendorId) {
+    //         const vendorSuppliers = await prisma.supplier.findMany({
+    //           where: { vendorId: user.vendorId },
+    //           select: { userId: true }
+    //         });
+    //         const supplierUserIds = vendorSuppliers
+    //           .map(s => s.userId)
+    //           .filter(Boolean) as string[];
+    //         where.OR = [
+    //           { userId: userId },
+    //           { userId: { in: supplierUserIds } },
+    //           {
+    //             metadata: {
+    //               path: ['vendorId'],
+    //               equals: user.vendorId
+    //             }
+    //           },
+    //           {
+    //             metadata: {
+    //               path: ['receiverVendorId'],
+    //               equals: user.vendorId
+    //             }
+    //           }
+    //         ];
+    //       } else {
+    //         where.userId = userId;
+    //       }
+    //       break;
+    //     case 'SUPPLIER':
+    //       if (user.supplierId) {
+    //         const supplier = await prisma.supplier.findUnique({
+    //           where: { id: user.supplierId },
+    //           select: { vendorId: true }
+    //         });
+    //         if (supplier) {
+    //           const vendor = await prisma.vendor.findUnique({
+    //             where: { id: supplier.vendorId },
+    //             select: { userId: true }
+    //           });
+    //           where.OR = [
+    //             { userId: userId },
+    //             ...(vendor ? [{ userId: vendor.userId }] : []),
+    //             {
+    //               metadata: {
+    //                 path: ['supplierId'],
+    //                 equals: user.supplierId
+    //               }
+    //             },
+    //             {
+    //               metadata: {
+    //                 path: ['receiverSupplierId'],
+    //                 equals: user.supplierId
+    //               }
+    //             }
+    //           ];
+    //         } else {
+    //           where.userId = userId;
+    //         }
+    //       } else {
+    //         where.userId = userId;
+    //       }
+    //       break;
+    //     default:
+    //       where.userId = userId;
+    //   }
+    //   return where;
+    // },
     buildRoleBasedWhereClause(userId) {
         return __awaiter(this, void 0, void 0, function* () {
             const user = yield prisma_1.prisma.user.findUnique({
@@ -573,83 +654,51 @@ exports.NotificationService = {
                 select: { role: true, vendorId: true, supplierId: true }
             });
             if (!user) {
-                return { userId };
+                return { userId, isDeleted: false };
             }
-            const where = { isDeleted: false };
+            const baseWhere = { isDeleted: false };
             switch (user.role) {
                 case 'ADMIN':
-                    // Admin can see all - no additional filtering
-                    break;
-                case 'VENDOR':
-                    if (user.vendorId) {
-                        const vendorSuppliers = yield prisma_1.prisma.supplier.findMany({
-                            where: { vendorId: user.vendorId },
-                            select: { userId: true }
-                        });
-                        const supplierUserIds = vendorSuppliers
-                            .map(s => s.userId)
-                            .filter(Boolean);
-                        where.OR = [
-                            { userId: userId },
-                            { userId: { in: supplierUserIds } },
+                    // Admin sees only their own notifications
+                    return Object.assign(Object.assign({}, baseWhere), { userId });
+                case 'VENDOR': {
+                    if (!user.vendorId) {
+                        return Object.assign(Object.assign({}, baseWhere), { userId });
+                    }
+                    const suppliers = yield prisma_1.prisma.supplier.findMany({
+                        where: { vendorId: user.vendorId },
+                        select: { userId: true }
+                    });
+                    const supplierUserIds = suppliers
+                        .map(s => s.userId)
+                        .filter(Boolean);
+                    return Object.assign(Object.assign({}, baseWhere), { OR: [
+                            { userId },
+                        ] });
+                }
+                case 'SUPPLIER': {
+                    if (!user.supplierId) {
+                        return Object.assign(Object.assign({}, baseWhere), { userId });
+                    }
+                    return Object.assign(Object.assign({}, baseWhere), { OR: [
+                            { userId },
                             {
                                 metadata: {
-                                    path: ['vendorId'],
-                                    equals: user.vendorId
+                                    path: ['supplierId'],
+                                    equals: user.supplierId
                                 }
                             },
                             {
                                 metadata: {
-                                    path: ['receiverVendorId'],
-                                    equals: user.vendorId
+                                    path: ['receiverSupplierId'],
+                                    equals: user.supplierId
                                 }
                             }
-                        ];
-                    }
-                    else {
-                        where.userId = userId;
-                    }
-                    break;
-                case 'SUPPLIER':
-                    if (user.supplierId) {
-                        const supplier = yield prisma_1.prisma.supplier.findUnique({
-                            where: { id: user.supplierId },
-                            select: { vendorId: true }
-                        });
-                        if (supplier) {
-                            const vendor = yield prisma_1.prisma.vendor.findUnique({
-                                where: { id: supplier.vendorId },
-                                select: { userId: true }
-                            });
-                            where.OR = [
-                                { userId: userId },
-                                ...(vendor ? [{ userId: vendor.userId }] : []),
-                                {
-                                    metadata: {
-                                        path: ['supplierId'],
-                                        equals: user.supplierId
-                                    }
-                                },
-                                {
-                                    metadata: {
-                                        path: ['receiverSupplierId'],
-                                        equals: user.supplierId
-                                    }
-                                }
-                            ];
-                        }
-                        else {
-                            where.userId = userId;
-                        }
-                    }
-                    else {
-                        where.userId = userId;
-                    }
-                    break;
+                        ] });
+                }
                 default:
-                    where.userId = userId;
+                    return Object.assign(Object.assign({}, baseWhere), { userId });
             }
-            return where;
         });
     },
     // async createNotification(data: any): Promise<Notification | null> {
@@ -800,9 +849,11 @@ exports.NotificationService = {
             case 'CONTRACT_EXPIRING_SOON':
                 return preferences.contractReminders;
             case 'ASSESSMENT_DUE':
+                return preferences.assessmentReminders; //ok
             case 'ASSESSMENT_SUBMITTED':
                 return preferences.assessmentReminders; //ok
             case 'ASSESSMENT_APPROVED':
+                return preferences.assessmentReminders; //ok
             case 'ASSESSMENT_REJECTED':
                 return preferences.assessmentReminders;
             case 'PROBLEM_REPORTED':
@@ -816,11 +867,13 @@ exports.NotificationService = {
             case 'REPORT_GENERATED':
                 return preferences.reportAlerts;
             case 'PAYMENT_SUCCESS':
+                return preferences.paymentAlerts;
             case 'PAYMENT_FAILED':
                 return preferences.paymentAlerts;
             case 'EVIDENCE_REQUESTED':
             case 'EVIDENCE_APPROVED':
             case 'EVIDENCE_REJECTED':
+                return preferences.paymentAlerts;
             case 'INVITATION_SENT':
             case 'INVITATION_ACCEPTED':
             case 'SYSTEM_ALERT':
@@ -1189,6 +1242,7 @@ exports.NotificationService = {
             const count = yield prisma_1.prisma.notification.count({
                 where: Object.assign(Object.assign({}, where), { isRead: false, isDeleted: false })
             });
+            console.log(" find count ", count);
             return { count };
         });
     },

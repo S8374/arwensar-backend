@@ -163,7 +163,7 @@ class MonitoringQueueService {
                 yield this.monitoringQueue.add('checkHighRiskSuppliers', { type: 'recurring', priority: 'high', timestamp: now.toISOString() }, {
                     jobId: 'high-risk-recurring',
                     repeat: {
-                        pattern: '0 */6 * * *',
+                        pattern: '0 0 * * *',
                         tz: 'UTC'
                     },
                     priority: 1

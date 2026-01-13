@@ -5,6 +5,7 @@ import httpStatus from "http-status";
 import { AdminService } from "./admin.service";
 import { paginationHelper } from "../../helper/paginationHelper";
 import catchAsync from "../../shared/catchAsync";
+import ApiError from "../../../error/ApiError";
 
 
 const getDashboardStats = catchAsync(async (req: Request, res: Response) => {
@@ -164,18 +165,6 @@ const generateReport = catchAsync(async (req: Request, res: Response) => {
   });
 });
 //============== USER =====================
-const getAllUsers = catchAsync(async (req: Request, res: Response) => {
-  const pagination = paginationHelper.calculatePagination(req.query);
-  const users = await AdminService.getAllUsers();
-
-  sendResponse(res, {
-    statusCode: httpStatus.OK,
-    success: true,
-    message: "Vendors retrieved successfully",
-    data: users,
-    meta: users.meta
-  });
-});
 const updateUsers = catchAsync(async (req: Request, res: Response) => {
   const { userId } = req.params;
   const data = req.body;
@@ -204,7 +193,7 @@ const toggleUserBlock = catchAsync(async (req: Request, res: Response) => {
   const { userId } = req.params;
   const { block, reason } = req.body as { block: boolean; reason?: string };
   const updatedUser = await AdminService.toggleUserBlock(userId, block, reason);
-
+  console.log("userId",userId)
   sendResponse(res, {
     statusCode: httpStatus.OK,
     success: true,
@@ -292,6 +281,75 @@ const permanentDeleteUser = catchAsync(async (req: Request, res: Response) => {
     data: result
   });
 });
+const updateAssessment = catchAsync(async (req: Request, res: Response) => {
+  const { assessmentId } = req.params;
+  const assessment = await AdminService.updateAssessment(assessmentId, {
+    ...req.body,
+    updatedBy: req.user?.userId
+  });
+
+  sendResponse(res, {
+    statusCode: httpStatus.OK,
+    success: true,
+    message: "Assessment updated successfully",
+    data: assessment
+  });
+});
+
+const deleteAssessment = catchAsync(async (req: Request, res: Response) => {
+  const { assessmentId } = req.params;
+  const result = await AdminService.deleteAssessment(assessmentId);
+
+  sendResponse(res, {
+    statusCode: httpStatus.OK,
+    success: true,
+    message: "Assessment deactivated successfully",
+    data: result
+  });
+});
+const getAssessmentById = catchAsync(async (req: Request, res: Response) => {
+  const { assessmentId } = req.params;
+  const assessment = await AdminService.getAssessmentById(assessmentId);
+
+  if (!assessment) {
+    throw new ApiError(httpStatus.NOT_FOUND, "Assessment not found");
+  }
+
+  sendResponse(res, {
+    statusCode: httpStatus.OK,
+    success: true,
+    message: "Assessment retrieved successfully",
+    data: assessment
+  });
+});
+
+
+
+
+// Fix: Add pagination support to getAllUsers (currently broken – using users.meta incorrectly)
+const getAllUsers = catchAsync(async (req: Request, res: Response) => {
+  const pagination = paginationHelper.calculatePagination(req.query);
+  const filters = {
+    // you can extract more filters from query if needed
+    role: req.query.role as string,
+    status: req.query.status as string,
+    search: req.query.search as string,
+    isVerified: req.query.isVerified ? req.query.isVerified === 'true' : undefined,
+  };
+
+  const { users, meta } = await AdminService.getAllUsers(filters, pagination);
+
+  sendResponse(res, {
+    statusCode: httpStatus.OK,
+    success: true,
+    message: "Users retrieved successfully",
+    data: users,
+    meta
+  });
+});
+
+// Also recommended: paginated vendors & suppliers
+
 export const AdminController = {
   getDashboardStats,
   createPlan,
@@ -301,6 +359,8 @@ export const AdminController = {
   getPlanById,
   createAssessment,
   getAllAssessments,
+  deleteAssessment,
+  updateAssessment,
   getAllVendors,
   getAllSuppliers,
   generateReport,

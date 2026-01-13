@@ -198,7 +198,8 @@ const getSingleSupplierProgress = (0, catchAsync_1.default)((req, res) => __awai
 const bulkImportSuppliers = (0, catchAsync_1.default)((req, res) => __awaiter(void 0, void 0, void 0, function* () {
     console.log("Processing bulk import request");
     const vendorId = req.user.vendorId;
-    if (!vendorId) {
+    const userId = req.user.userId;
+    if (!vendorId && !userId) {
         return (0, sendResponse_1.default)(res, {
             statusCode: http_status_1.default.BAD_REQUEST,
             success: false,
@@ -218,12 +219,12 @@ const bulkImportSuppliers = (0, catchAsync_1.default)((req, res) => __awaiter(vo
     // Set bulk count for usage tracking middleware
     // (req as any).bulkCount = req.body.suppliers.length;
     // Check capacity before processing
-    const capacityCheck = yield usage_service_1.usageService.checkBulkSupplierLimit(vendorId, req.body.suppliers.length);
+    const capacityCheck = yield usage_service_1.usageService.checkBulkSupplierLimit(userId, req.body.suppliers.length);
     if (!capacityCheck.canProceed) {
         throw new ApiError_1.default(http_status_1.default.PAYMENT_REQUIRED, capacityCheck.message);
     }
     // Decrement usage for all suppliers
-    yield usage_service_1.usageService.decrementUsage(vendorId, 'suppliersUsed', req.body.suppliers.length);
+    yield usage_service_1.usageService.decrementUsage(userId, 'suppliersUsed', req.body.suppliers.length);
     const result = yield vendor_service_1.VendorService.bulkImportSuppliers(vendorId, req.body);
     (0, sendResponse_1.default)(res, {
         statusCode: http_status_1.default.OK,

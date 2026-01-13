@@ -25,11 +25,9 @@ export async function resetExpiredSubscriptions() {
   for (const sub of expiredSubscriptions) {
     try {
       await usageService.resetExpiredSubscription(sub.userId);
-      console.log(`Reset subscription for user: ${sub.userId}`);
     } catch (error) {
       console.error(`Failed to reset subscription for user ${sub.userId}:`, error);
     }
   }
 
-  console.log(`Reset ${expiredSubscriptions.length} expired subscriptions.`);
 }

@@ -193,7 +193,7 @@ export class MonitoringQueueService {
         {
           jobId: 'high-risk-recurring',
           repeat: {
-            pattern: '0 */6 * * *',
+            pattern: '0 0 * * *',
 
             tz: 'UTC'
           },

@@ -32,7 +32,6 @@ class AlertService {
     }
     runDailyChecks() {
         return __awaiter(this, void 0, void 0, function* () {
-            console.log('🚨 Running daily alert checks...');
             try {
                 const checks = [
                     //this.checkCertificateExpiry(),
@@ -43,7 +42,6 @@ class AlertService {
                     this.checkSupplierInactivity()
                 ];
                 yield Promise.all(checks);
-                console.log('✅ Daily alert checks completed');
             }
             catch (error) {
                 console.error('❌ Error running daily alerts:', error);

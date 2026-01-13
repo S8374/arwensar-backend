@@ -136,13 +136,14 @@ class UsageService {
 
   // ========== VALIDATE SUBSCRIPTION STATUS ==========
   private async validateSubscription(userId: string) {
+    console.log("Hiting User Id" , userId);
     const subscription = await prisma.subscription.findUnique({
       where: { userId },
       include: { plan: true }
     });
 
     if (!subscription) {
-      throw new ApiError(httpStatus.NOT_FOUND, "No active subscription found");
+      throw new ApiError(httpStatus.NOT_FOUND, "No active subscription found / Limit Expire");
     }
 
     // Check if subscription is active

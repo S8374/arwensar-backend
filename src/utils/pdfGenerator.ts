@@ -109,6 +109,7 @@ export const generatePDF = async (options: PDFOptions): Promise<string> => {
 };
 
 // Upload to MinIO and return a presigned URL (7 days expiry - safest option)
+
 const uploadToMinIO = async (
   buffer: Buffer,
   title: string,
@@ -129,18 +130,38 @@ const uploadToMinIO = async (
     'X-Amz-Meta-Generated': new Date().toISOString(),
   };
 
+  // Ensure bucket exists
+  const exists = await minioClient.bucketExists(BUCKET_NAME);
+  if (!exists) {
+    await minioClient.makeBucket(BUCKET_NAME, 'us-east-1');
+  }
+
+  // Make bucket public (so URLs are lifetime accessible)
+  const publicPolicy = {
+    Version: '2012-10-17',
+    Statement: [
+      {
+        Effect: 'Allow',
+        Principal: { AWS: '*' },
+        Action: ['s3:GetObject'],
+        Resource: [`arn:aws:s3:::${BUCKET_NAME}/*`],
+      },
+    ],
+  };
+  await minioClient.setBucketPolicy(BUCKET_NAME, JSON.stringify(publicPolicy));
+
   // Upload the PDF
   await minioClient.putObject(BUCKET_NAME, objectName, buffer, buffer.length, metaData);
 
-  // Generate presigned GET URL - valid for 7 days (maximum allowed by MinIO)
-  const presignedUrl = await minioClient.presignedGetObject(
-    BUCKET_NAME,
-    objectName,
-    60 * 60 * 24 * 7 // 7 days in seconds
-  );
+  // Return lifetime URL
+  const endpoint = process.env.MINIO_ENDPOINT || 'localhost';
+  const port = process.env.MINIO_PORT || 9000;
+  const protocol = process.env.MINIO_USE_SSL === 'true' ? 'https' : 'http';
+  const lifetimeUrl = `${protocol}://${endpoint}:${port}/${BUCKET_NAME}/${objectName}`;
 
-  return presignedUrl;
+  return lifetimeUrl;
 };
+
 
 // ========== PDF CONTENT GENERATORS ==========
 

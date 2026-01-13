@@ -15,7 +15,6 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.DocumentService = void 0;
 const prisma_1 = require("../../shared/prisma");
 const http_status_1 = __importDefault(require("http-status"));
-const mailtrap_service_1 = require("../../shared/mailtrap.service");
 const notification_service_1 = require("../notification/notification.service");
 const paginationHelper_1 = require("../../helper/paginationHelper");
 const ApiError_1 = __importDefault(require("../../../error/ApiError"));
@@ -669,38 +668,34 @@ exports.DocumentService = {
                     }
                 });
                 // Send email to uploader
-                try {
-                    yield mailtrap_service_1.mailtrapService.sendHtmlEmail({
-                        to: document.uploadedBy.email,
-                        subject: `Document ${data.status}: ${document.name}`,
-                        html: `
-          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-            <h2 style="color: #333;">Document ${data.status}</h2>
-            <p>Your document <strong>"${document.name}"</strong> has been ${data.status.toLowerCase()}.</p>
-            
-            ${data.reviewNotes ? `
-              <div style="background-color: #f8f9fa; padding: 20px; border-radius: 5px; margin: 20px 0;">
-                <h3 style="margin-top: 0;">Review Notes:</h3>
-                <p>${data.reviewNotes}</p>
-              </div>
-            ` : ''}
-            
-            <div style="text-align: center; margin: 30px 0;">
-              <a href="${process.env.FRONTEND_URL}/documents/${updatedDocument.id}" 
-                 style="background-color: #007bff; color: white; padding: 12px 30px; text-decoration: none; border-radius: 5px; font-weight: bold;">
-                View Document
-              </a>
-            </div>
-            
-            <hr style="border: none; border-top: 1px solid #eee; margin: 20px 0;">
-            <p style="color: #666; font-size: 12px;">© ${new Date().getFullYear()} CyberNark. All rights reserved.</p>
-          </div>
-        `
-                    });
-                }
-                catch (error) {
-                    console.error("Failed to send document review email:", error);
-                }
+                //     try {
+                //         await mailtrapService.sendHtmlEmail({
+                //             to: document.uploadedBy.email,
+                //             subject: `Document ${data.status}: ${document.name}`,
+                //             html: `
+                //   <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+                //     <h2 style="color: #333;">Document ${data.status}</h2>
+                //     <p>Your document <strong>"${document.name}"</strong> has been ${data.status.toLowerCase()}.</p>
+                //     ${data.reviewNotes ? `
+                //       <div style="background-color: #f8f9fa; padding: 20px; border-radius: 5px; margin: 20px 0;">
+                //         <h3 style="margin-top: 0;">Review Notes:</h3>
+                //         <p>${data.reviewNotes}</p>
+                //       </div>
+                //     ` : ''}
+                //     <div style="text-align: center; margin: 30px 0;">
+                //       <a href="${process.env.FRONTEND_URL}/documents/${updatedDocument.id}" 
+                //          style="background-color: #007bff; color: white; padding: 12px 30px; text-decoration: none; border-radius: 5px; font-weight: bold;">
+                //         View Document
+                //       </a>
+                //     </div>
+                //     <hr style="border: none; border-top: 1px solid #eee; margin: 20px 0;">
+                //     <p style="color: #666; font-size: 12px;">© ${new Date().getFullYear()} CyberNark. All rights reserved.</p>
+                //   </div>
+                // `
+                //         });
+                //     } catch (error) {
+                //         console.error("Failed to send document review email:", error);
+                //     }
             }
             return updatedDocument;
         });
@@ -731,6 +726,18 @@ exports.DocumentService = {
             yield prisma_1.prisma.document.delete({
                 where: { id: documentId }
             });
+            // Send notification
+            if (document.uploadedById) {
+                yield prisma_1.prisma.notification.create({
+                    data: {
+                        userId: document.uploadedById, // notify the uploader
+                        title: "Document Deleted",
+                        message: `Your document "${document.name || document.id}" was deleted by ${user.role}.`,
+                        type: "SYSTEM_ALERT",
+                        createdAt: new Date()
+                    }
+                });
+            }
             return {
                 message: "Document deleted successfully"
             };

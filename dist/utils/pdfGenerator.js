@@ -110,12 +110,32 @@ const uploadToMinIO = (buffer, title, type, vendorId, userId) => __awaiter(void 
         'X-Amz-Meta-Userid': userId || 'unknown',
         'X-Amz-Meta-Generated': new Date().toISOString(),
     };
+    // Ensure bucket exists
+    const exists = yield minioClient.bucketExists(BUCKET_NAME);
+    if (!exists) {
+        yield minioClient.makeBucket(BUCKET_NAME, 'us-east-1');
+    }
+    // Make bucket public (so URLs are lifetime accessible)
+    const publicPolicy = {
+        Version: '2012-10-17',
+        Statement: [
+            {
+                Effect: 'Allow',
+                Principal: { AWS: '*' },
+                Action: ['s3:GetObject'],
+                Resource: [`arn:aws:s3:::${BUCKET_NAME}/*`],
+            },
+        ],
+    };
+    yield minioClient.setBucketPolicy(BUCKET_NAME, JSON.stringify(publicPolicy));
     // Upload the PDF
     yield minioClient.putObject(BUCKET_NAME, objectName, buffer, buffer.length, metaData);
-    // Generate presigned GET URL - valid for 7 days (maximum allowed by MinIO)
-    const presignedUrl = yield minioClient.presignedGetObject(BUCKET_NAME, objectName, 60 * 60 * 24 * 7 // 7 days in seconds
-    );
-    return presignedUrl;
+    // Return lifetime URL
+    const endpoint = process.env.MINIO_ENDPOINT || 'localhost';
+    const port = process.env.MINIO_PORT || 9000;
+    const protocol = process.env.MINIO_USE_SSL === 'true' ? 'https' : 'http';
+    const lifetimeUrl = `${protocol}://${endpoint}:${port}/${BUCKET_NAME}/${objectName}`;
+    return lifetimeUrl;
 });
 // ========== PDF CONTENT GENERATORS ==========
 const generateRiskAssessmentPDF = (doc, data) => {

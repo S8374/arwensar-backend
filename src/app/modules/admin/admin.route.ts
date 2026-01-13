@@ -59,7 +59,8 @@ router.get(
   auth("ADMIN"),
   AdminController.getAllAssessments
 );
-
+router.patch('/assessments/:assessmentId', AdminController.updateAssessment);
+router.delete('/assessments/:assessmentId', AdminController.deleteAssessment);
 // User Management
 router.get(
   "/vendors",

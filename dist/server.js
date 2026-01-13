@@ -76,7 +76,7 @@ function bootstrap() {
             });
             // Setup subscription reset cron (using node-cron for this)
             const cron = yield Promise.resolve().then(() => __importStar(require('node-cron')));
-            cron.schedule('0 2 * * *', () => __awaiter(this, void 0, void 0, function* () {
+            cron.schedule('0 0 * * *', () => __awaiter(this, void 0, void 0, function* () {
                 console.log('🔄 Running subscription reset cron job...');
                 try {
                     yield (0, resetPlanUsage_1.resetExpiredSubscriptions)();

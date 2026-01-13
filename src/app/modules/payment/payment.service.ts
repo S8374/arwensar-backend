@@ -1305,7 +1305,252 @@ export const PaymentService = {
       console.error("Error processing checkout.session.completed:", error);
     }
   }
-  ,
+//  async handleCheckoutSessionCompleted(session: any): Promise<void> {
+//   const metadata = session.metadata || {};
+//   const {
+//     userId,
+//     vendorId,
+//     planId: newPlanId,
+//     subscriptionId,
+//     isPlanChange,
+//     previousPlanId,
+//     billingCycle,
+//     previousStripeSubscriptionId,
+//   } = metadata;
+
+//   if (!userId || !vendorId || !newPlanId) {
+//     console.error("Missing required metadata");
+//     return;
+//   }
+
+//   const stripeSubscription = session.subscription
+//     ? await stripeService.stripe.subscriptions.retrieve(session.subscription as string)
+//     : null;
+
+//   const isPlanChangeFlag = isPlanChange === "true";
+
+//   try {
+//     let finalSubscription;
+
+//     // ============================= PLAN CHANGE =============================
+//     if (isPlanChangeFlag) {
+//       const existingSubscription = await prisma.subscription.findUnique({
+//         where: { userId },
+//         include: { plan: true },
+//       });
+
+//       if (!existingSubscription) {
+//         console.error("Existing subscription not found");
+//         return;
+//       }
+
+//       const newPlan = await prisma.plan.findUnique({ where: { id: newPlanId } });
+//       if (!newPlan) {
+//         console.error("New plan not found");
+//         return;
+//       }
+
+//       // Cancel previous Stripe subscription safely
+//       if (previousStripeSubscriptionId && previousStripeSubscriptionId !== stripeSubscription?.id) {
+//         try {
+//           await stripeService.stripe.subscriptions.cancel(previousStripeSubscriptionId, { prorate: true });
+//         } catch (err) {
+//           console.error("Failed to cancel old Stripe subscription", err);
+//         }
+//       }
+
+//       // Update subscription
+//       finalSubscription = await prisma.subscription.update({
+//         where: { id: existingSubscription.id },
+//         data: {
+//           planId: newPlanId,
+//           status: (stripeSubscription?.status?.toUpperCase() as SubscriptionStatus) || "ACTIVE",
+//           stripeSubscriptionId: stripeSubscription?.id || (session.subscription as string),
+//           stripeCustomerId: session.customer as string,
+//           currentPeriodStart: (stripeSubscription as any)?.current_period_start
+//             ? new Date((stripeSubscription as any).current_period_start * 1000)
+//             : new Date(),
+//           currentPeriodEnd: (stripeSubscription as any)?.current_period_end
+//             ? new Date((stripeSubscription as any).current_period_end * 1000)
+//             : null,
+//           trialStart: null,
+//           trialEnd: null,
+//           billingCycle: billingCycle || existingSubscription.billingCycle,
+//         },
+//       });
+
+//       // ===================== LIMIT HANDLING =====================
+//       const features = getPlanFeatures(newPlan);
+//       const isEnterprisePlan = newPlan.type === "ENTERPRISE";
+//       const now = new Date();
+
+//       const existingUsage = await prisma.planLimitData.findUnique({
+//         where: { subscriptionId: finalSubscription.id },
+//       });
+
+//       if (existingUsage) {
+//         await prisma.planLimitData.update({
+//           where: { subscriptionId: finalSubscription.id },
+//           data: isEnterprisePlan
+//             ? {
+//                 suppliersUsed: null,
+//                 assessmentsUsed: null,
+//                 messagesUsed: null,
+//                 documentReviewsUsed: null,
+//                 reportCreate: null,
+//                 reportsGeneratedUsed: null,
+//                 notificationsSend: null,
+//                 month: now.getMonth() + 1,
+//                 year: now.getFullYear(),
+//               }
+//             : {
+//                 suppliersUsed: (existingUsage.suppliersUsed ?? 0) + (features.supplierLimit ?? 0),
+//                 assessmentsUsed: (existingUsage.assessmentsUsed ?? 0) + (features.assessmentLimit ?? 0),
+//                 messagesUsed: (existingUsage.messagesUsed ?? 0) + (features.messagesPerMonth ?? 0),
+//                 documentReviewsUsed: (existingUsage.documentReviewsUsed ?? 0) + (features.documentReviewsPerMonth ?? 0),
+//                 reportCreate: (existingUsage.reportCreate ?? 0) + (features.reportCreate ?? 0),
+//                 reportsGeneratedUsed: (existingUsage.reportsGeneratedUsed ?? 0) + (features.reportsGeneratedPerMonth ?? 0),
+//                 notificationsSend: (existingUsage.notificationsSend ?? 0) + (features.notificationsSend ?? 0),
+//                 month: now.getMonth() + 1,
+//                 year: now.getFullYear(),
+//               },
+//         });
+//       } else {
+//         await prisma.planLimitData.create({
+//           data: isEnterprisePlan
+//             ? {
+//                 subscriptionId: finalSubscription.id,
+//                 suppliersUsed: null,
+//                 assessmentsUsed: null,
+//                 messagesUsed: null,
+//                 documentReviewsUsed: null,
+//                 reportCreate: null,
+//                 reportsGeneratedUsed: null,
+//                 notificationsSend: null,
+//                 month: now.getMonth() + 1,
+//                 year: now.getFullYear(),
+//               }
+//             : {
+//                 subscriptionId: finalSubscription.id,
+//                 suppliersUsed: features.supplierLimit ?? 0,
+//                 assessmentsUsed: features.assessmentLimit ?? 0,
+//                 messagesUsed: features.messagesPerMonth ?? 0,
+//                 documentReviewsUsed: features.documentReviewsPerMonth ?? 0,
+//                 reportCreate: features.reportCreate ?? 0,
+//                 reportsGeneratedUsed: features.reportsGeneratedPerMonth ?? 0,
+//                 notificationsSend: features.notificationsSend ?? 0,
+//                 month: now.getMonth() + 1,
+//                 year: now.getFullYear(),
+//               },
+//         });
+//       }
+
+//       // Save plan change history
+//       await prisma.planChangeHistory.create({
+//         data: {
+//           subscriptionId: finalSubscription.id,
+//           previousPlanId: previousPlanId || existingSubscription.planId,
+//           newPlanId,
+//           changedAt: new Date(),
+//           changedBy: userId,
+//           reason: this.isPlanUpgrade(existingSubscription.plan, newPlan) ? "upgrade" : "downgrade",
+//           stripeSessionId: session.id,
+//         },
+//       });
+
+//       // ===================== CREATE NOTIFICATION =====================
+//       await prisma.notification.create({
+//         data: {
+//           userId,
+//           title: "Plan Updated",
+//           message: `Your subscription plan was ${this.isPlanUpgrade(existingSubscription.plan, newPlan) ? "upgraded" : "downgraded"} to ${newPlan.name}`,
+//           type: "PAYMENT_SUCCESS",
+//           createdAt: new Date(),
+//         },
+//       });
+
+//       console.log("Plan changed successfully with notification");
+
+//     } 
+//     // ============================= FIRST-TIME SUBSCRIPTION =============================
+//     else {
+//       finalSubscription = await prisma.subscription.update({
+//         where: { id: subscriptionId },
+//         data: {
+//           status: (stripeSubscription?.status?.toUpperCase() as SubscriptionStatus) || "ACTIVE",
+//           stripeSubscriptionId: stripeSubscription?.id || (session.subscription as string),
+//           stripeCustomerId: session.customer as string,
+//           currentPeriodStart: (stripeSubscription as any)?.current_period_start
+//             ? new Date((stripeSubscription as any).current_period_start * 1000)
+//             : new Date(),
+//           currentPeriodEnd: (stripeSubscription as any)?.current_period_end
+//             ? new Date((stripeSubscription as any).current_period_end * 1000)
+//             : null,
+//           trialStart: null,
+//           trialEnd: null,
+//         },
+//       });
+
+//       const newPlan = await prisma.plan.findUnique({ where: { id: newPlanId } });
+//       if (!newPlan) throw new Error("Plan not found");
+
+//       const features = getPlanFeatures(newPlan);
+//       const isEnterprisePlan = newPlan.type === "ENTERPRISE";
+
+//       await prisma.planLimitData.create({
+//         data: isEnterprisePlan
+//           ? {
+//               subscriptionId: finalSubscription.id,
+//               suppliersUsed: null,
+//               assessmentsUsed: null,
+//               messagesUsed: null,
+//               documentReviewsUsed: null,
+//               reportCreate: null,
+//               reportsGeneratedUsed: null,
+//               notificationsSend: null,
+//               month: new Date().getMonth() + 1,
+//               year: new Date().getFullYear(),
+//             }
+//           : {
+//               subscriptionId: finalSubscription.id,
+//               suppliersUsed: features.supplierLimit ?? 0,
+//               assessmentsUsed: features.assessmentLimit ?? 0,
+//               messagesUsed: features.messagesPerMonth ?? 0,
+//               documentReviewsUsed: features.documentReviewsPerMonth ?? 0,
+//               reportCreate: features.reportCreate ?? 0,
+//               reportsGeneratedUsed: features.reportsGeneratedPerMonth ?? 0,
+//               notificationsSend: features.notificationsSend ?? 0,
+//               month: new Date().getMonth() + 1,
+//               year: new Date().getFullYear(),
+//             },
+//       });
+
+//       // ===================== CREATE NOTIFICATION =====================
+//       await prisma.notification.create({
+//         data: {
+//           userId,
+//           title: "Subscription Activated",
+//           message: `Your subscription to ${newPlan.name} has been activated successfully.`,
+//           type: "PAYMENT_SUCCESS",
+//           createdAt: new Date(),
+//         },
+//       });
+
+//       console.log("First subscription created & notification sent");
+//     }
+
+//     // ===================== UPDATE VENDOR STRIPE CUSTOMER =====================
+//     await prisma.vendor.update({
+//       where: { id: vendorId },
+//       data: { stripeCustomerId: session.customer as string },
+//     });
+
+//     console.log(`Subscription ${finalSubscription.id} processed successfully`);
+//   } catch (error) {
+//     console.error("Error processing checkout.session.completed:", error);
+//   }
+// }
+,
 
   // Only create payment when real money is charged
   async handleInvoicePaymentSucceeded(invoice: any): Promise<void> {

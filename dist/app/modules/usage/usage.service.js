@@ -130,12 +130,13 @@ class UsageService {
     // ========== VALIDATE SUBSCRIPTION STATUS ==========
     validateSubscription(userId) {
         return __awaiter(this, void 0, void 0, function* () {
+            console.log("Hiting User Id", userId);
             const subscription = yield prisma_1.prisma.subscription.findUnique({
                 where: { userId },
                 include: { plan: true }
             });
             if (!subscription) {
-                throw new ApiError_1.default(http_status_1.default.NOT_FOUND, "No active subscription found");
+                throw new ApiError_1.default(http_status_1.default.NOT_FOUND, "No active subscription found / Limit Expire");
             }
             // Check if subscription is active
             if (!['ACTIVE', 'TRIALING'].includes(subscription.status)) {

@@ -35,7 +35,6 @@ export class AlertService {
   }
 
   async runDailyChecks(): Promise<void> {
-    console.log('🚨 Running daily alert checks...');
     
     try {
       const checks = [
@@ -48,7 +47,6 @@ export class AlertService {
       ];
 
       await Promise.all(checks);
-      console.log('✅ Daily alert checks completed');
     } catch (error) {
       console.error('❌ Error running daily alerts:', error);
     }
