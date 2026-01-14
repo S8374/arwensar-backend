@@ -40,10 +40,6 @@ const updatePlan = catchAsync(async (req: Request, res: Response) => {
   // Extract data - check for data property first, then body, then direct
   const data = req.body.data || req.body.body || req.body;
   
-  console.log("Plan update details", req.body);  // Log the full body
-  console.log("Extracted data:", data);         // Log what we extracted
-  console.log("Plan planId", planId);
-  
   if (!data) {
     throw new ApiError(httpStatus.BAD_REQUEST, "No data provided for update");
   }
@@ -298,7 +294,6 @@ const permanentDeleteUser = catchAsync(async (req: Request, res: Response) => {
 });
 const updateAssessment = catchAsync(async (req: Request, res: Response) => {
   const { assessmentId } = req.params;
-  console.log("Assainment Update fiend",req.body)
   const assessment = await AdminService.updateAssessment(assessmentId, {
     ...req.body,
     updatedBy: req.user?.userId

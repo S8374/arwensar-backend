@@ -6,18 +6,12 @@ import httpStatus from "http-status";
 export const ActivityLogService = {
 
     async getUserActivity(
-        userId: string,
-        page = 1,
-        limit = 20,
-        action?: string
+userId: string, page = 1, limit = 20, p0?: string,
     ) {
         const skip = (page - 1) * limit;
 
         const where: any = { userId };
 
-        if (action) {
-            where.action = action.toUpperCase();
-        }
 
         const [logs, total] = await Promise.all([
             prisma.activityLog.findMany({

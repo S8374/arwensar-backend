@@ -733,66 +733,66 @@ export const NotificationService = {
   //   return where;
   // },
 
-async buildRoleBasedWhereClause(userId: string): Promise<any> {
-  const user = await prisma.user.findUnique({
-    where: { id: userId },
-    select: { role: true, vendorId: true, supplierId: true }
-  });
+  async buildRoleBasedWhereClause(userId: string): Promise<any> {
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { role: true, vendorId: true, supplierId: true }
+    });
 
-  if (!user) {
-    return { userId, isDeleted: false };
-  }
-
-  const baseWhere = { isDeleted: false };
-
-  switch (user.role) {
-    case 'ADMIN':
-      // Admin sees only their own notifications
-      return {
-        ...baseWhere,
-        userId
-      };
-
-    case 'VENDOR': {
-      if (!user.vendorId) {
-        return { ...baseWhere, userId };
-      }
-
-      const suppliers = await prisma.supplier.findMany({
-        where: { vendorId: user.vendorId },
-        select: { userId: true }
-      });
-
-      const supplierUserIds = suppliers
-        .map(s => s.userId)
-        .filter(Boolean);
-
-      return {
-        ...baseWhere,
-        OR: [
-          { userId },
-        ]
-      };
+    if (!user) {
+      return { userId, isDeleted: false };
     }
 
-    case 'SUPPLIER': {
-      if (!user.supplierId) {
-        return { ...baseWhere, userId };
+    const baseWhere = { isDeleted: false };
+
+    switch (user.role) {
+      case 'ADMIN':
+        // Admin sees only their own notifications
+        return {
+          ...baseWhere,
+          userId
+        };
+
+      case 'VENDOR': {
+        if (!user.vendorId) {
+          return { ...baseWhere, userId };
+        }
+
+        const suppliers = await prisma.supplier.findMany({
+          where: { vendorId: user.vendorId },
+          select: { userId: true }
+        });
+
+        const supplierUserIds = suppliers
+          .map(s => s.userId)
+          .filter(Boolean);
+
+        return {
+          ...baseWhere,
+          OR: [
+            { userId },
+          ]
+        };
       }
 
-      return {
-        ...baseWhere,
-        OR: [
-          { userId }
-          
-        ]
-      };
-    }
+      case 'SUPPLIER': {
+        if (!user.supplierId) {
+          return { ...baseWhere, userId };
+        }
 
-    default:
-      return { ...baseWhere, userId };
-  }
-},
+        return {
+          ...baseWhere,
+          OR: [
+            { userId }
+
+          ]
+        };
+      }
+
+      default:
+        return { ...baseWhere, userId };
+    }
+  },
   // async createNotification(data: any): Promise<Notification | null> {
   //   const targetUser = await prisma.user.findUnique({
   //     where: { id: data.userId },
@@ -871,6 +871,92 @@ async buildRoleBasedWhereClause(userId: string): Promise<any> {
   //   return notification;
   // }
 
+  // async createNotification(data: any): Promise<Notification | null> {
+  //   const targetUser = await prisma.user.findUnique({
+  //     where: { id: data.userId },
+  //     select: { id: true, email: true }
+  //   });
+
+  //   if (!targetUser || !targetUser.email) {
+  //     throw new ApiError(httpStatus.NOT_FOUND, "Target user not found or email missing");
+  //   }
+
+  //   // ===============================
+  //   // GET / CREATE PREFERENCES
+  //   // ===============================
+  //   let preferences = await prisma.notificationPreferences.findUnique({
+  //     where: { userId: data.userId }
+  //   });
+
+  //   if (!preferences) {
+  //     preferences = await prisma.notificationPreferences.create({
+  //       data: {
+  //         userId: data.userId,
+  //         emailNotifications: true // ✅ DEFAULT ENABLED
+  //       }
+  //     });
+  //   }
+
+  //   // ===============================
+  //   // 1️⃣ DB NOTIFICATION (TYPE BASED)
+  //   // ===============================
+  //   const allowDbNotification = this.shouldSendNotificationForType(
+  //     data.type,
+  //     preferences
+  //   );
+
+  //   let notification: Notification | null = null;
+
+  //   if (allowDbNotification) {
+  //     notification = await prisma.notification.create({
+  //       data: {
+  //         userId: data.userId,
+  //         title: data.title,
+  //         message: data.message,
+  //         type: data.type,
+  //         metadata: data.metadata || {},
+  //         priority: data.priority || "MEDIUM"
+  //       }
+  //     });
+  //   } else {
+  //     console.log(
+  //       `[DB Notification Skipped] type=${data.type}, user=${data.userId}`
+  //     );
+  //   }
+
+  //   // ===============================
+  //   // 2️⃣ EMAIL (GLOBAL SWITCH)
+  //   // ===============================
+  //   if (!preferences.emailNotifications) {
+  //     console.log(`[Email Disabled by User] user=${data.userId}`);
+  //     return notification;
+  //   }
+
+  //   // if (this.isInQuietHours(preferences)) {
+  //   //   console.log(`[Email Blocked by Quiet Hours] user=${data.userId}`);
+  //   //   return notification;
+  //   // }
+
+  //   // ===============================
+  //   // 3️⃣ SEND EMAIL
+  //   // ===============================
+  //   try {
+  //     await mailtrapService.sendHtmlEmail({
+  //       to: targetUser.email,
+  //       subject: data.title,
+  //       html: this.generateEmailTemplate(data, targetUser)
+  //     });
+
+  //     console.log(
+  //       `[Email Sent] to=${targetUser.email}, type=${data.type}`
+  //     );
+  //   } catch (error) {
+  //     console.error(`[Email Failed]`, error);
+  //   }
+
+  //   return notification;
+  // }
+ // ========== CREATE NOTIFICATION (UPDATED WITH ENHANCED DUPLICATE PREVENTION) ==========
   async createNotification(data: any): Promise<Notification | null> {
     const targetUser = await prisma.user.findUnique({
       where: { id: data.userId },
@@ -882,7 +968,16 @@ async buildRoleBasedWhereClause(userId: string): Promise<any> {
     }
 
     // ===============================
-    // GET / CREATE PREFERENCES
+    // 1️⃣ CHECK FOR RECENT DUPLICATE NOTIFICATION
+    // ===============================
+    const duplicateCheck = await this.checkForDuplicateNotification(data);
+    if (duplicateCheck.isDuplicate) {
+      console.log(`[Duplicate Blocked] type=${data.type}, user=${data.userId}, supplier=${duplicateCheck.supplierId || 'N/A'}`);
+      return null;
+    }
+
+    // ===============================
+    // 2️⃣ GET / CREATE PREFERENCES
     // ===============================
     let preferences = await prisma.notificationPreferences.findUnique({
       where: { userId: data.userId }
@@ -892,13 +987,13 @@ async buildRoleBasedWhereClause(userId: string): Promise<any> {
       preferences = await prisma.notificationPreferences.create({
         data: {
           userId: data.userId,
-          emailNotifications: true // ✅ DEFAULT ENABLED
+          emailNotifications: true
         }
       });
     }
 
     // ===============================
-    // 1️⃣ DB NOTIFICATION (TYPE BASED)
+    // 3️⃣ DB NOTIFICATION (TYPE BASED)
     // ===============================
     const allowDbNotification = this.shouldSendNotificationForType(
       data.type,
@@ -908,13 +1003,20 @@ async buildRoleBasedWhereClause(userId: string): Promise<any> {
     let notification: Notification | null = null;
 
     if (allowDbNotification) {
+      // Add metadata to track email status
+      const metadata = {
+        ...(data.metadata || {}),
+        emailSent: false,
+        notificationCreatedAt: new Date().toISOString()
+      };
+
       notification = await prisma.notification.create({
         data: {
           userId: data.userId,
           title: data.title,
           message: data.message,
           type: data.type,
-          metadata: data.metadata || {},
+          metadata: metadata,
           priority: data.priority || "MEDIUM"
         }
       });
@@ -925,10 +1027,16 @@ async buildRoleBasedWhereClause(userId: string): Promise<any> {
     }
 
     // ===============================
-    // 2️⃣ EMAIL (GLOBAL SWITCH)
+    // 4️⃣ EMAIL (GLOBAL SWITCH & DUPLICATE CHECK)
     // ===============================
     if (!preferences.emailNotifications) {
       console.log(`[Email Disabled by User] user=${data.userId}`);
+      return notification;
+    }
+
+    // Check if email already sent today for this type and entity
+    if (await this.hasEmailBeenSentToday(data)) {
+      console.log(`[Email Already Sent Today] type=${data.type}, user=${data.userId}`);
       return notification;
     }
 
@@ -938,7 +1046,7 @@ async buildRoleBasedWhereClause(userId: string): Promise<any> {
     // }
 
     // ===============================
-    // 3️⃣ SEND EMAIL
+    // 5️⃣ SEND EMAIL
     // ===============================
     try {
       await mailtrapService.sendHtmlEmail({
@@ -946,6 +1054,20 @@ async buildRoleBasedWhereClause(userId: string): Promise<any> {
         subject: data.title,
         html: this.generateEmailTemplate(data, targetUser)
       });
+
+      // Update notification metadata to mark email as sent
+      if (notification) {
+        const updatedMetadata = {
+          ...(notification.metadata as any || {}),
+          emailSent: true,
+          emailSentAt: new Date().toISOString()
+        };
+
+        await prisma.notification.update({
+          where: { id: notification.id },
+          data: { metadata: updatedMetadata }
+        });
+      }
 
       console.log(
         `[Email Sent] to=${targetUser.email}, type=${data.type}`
@@ -955,8 +1077,100 @@ async buildRoleBasedWhereClause(userId: string): Promise<any> {
     }
 
     return notification;
-  }
+  },
 
+  // ========== CHECK FOR DUPLICATE NOTIFICATION ==========
+   async checkForDuplicateNotification(data: any): Promise<{
+    isDuplicate: boolean;
+    supplierId?: string;
+    vendorId?: string;
+  }> {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    const metadata = data.metadata || {};
+    
+    // Build query based on notification type and metadata
+    const where: any = {
+      userId: data.userId,
+      type: data.type,
+      createdAt: { gte: today },
+      isDeleted: false
+    };
+
+    // Check for specific entity duplicates
+    if (metadata.supplierId) {
+      where.metadata = {
+        path: ['supplierId'],
+        equals: metadata.supplierId
+      };
+    } else if (metadata.vendorId) {
+      where.metadata = {
+        path: ['vendorId'],
+        equals: metadata.vendorId
+      };
+    } else {
+      // For general notifications, check by title/message
+      where.OR = [
+        { title: data.title },
+        { 
+          AND: [
+            { message: data.message },
+            { type: data.type }
+          ]
+        }
+      ];
+    }
+
+    const existingNotification = await prisma.notification.findFirst({
+      where
+    });
+
+    return {
+      isDuplicate: !!existingNotification,
+      supplierId: metadata.supplierId,
+      vendorId: metadata.vendorId
+    };
+  },
+
+  // ========== CHECK IF EMAIL ALREADY SENT TODAY ==========
+   async hasEmailBeenSentToday(data: any): Promise<boolean> {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    const metadata = data.metadata || {};
+    
+    const where: any = {
+      userId: data.userId,
+      type: data.type,
+      metadata: {
+        path: ['emailSent'],
+        equals: true
+      },
+      createdAt: { gte: today }
+    };
+
+    // Add entity-specific check
+    if (metadata.supplierId) {
+      where.metadata = {
+        path: ['supplierId'],
+        equals: metadata.supplierId
+      };
+    }
+
+    if (metadata.vendorId) {
+      where.metadata = {
+        path: ['vendorId'],
+        equals: metadata.vendorId
+      };
+    }
+
+    const existingEmail = await prisma.notification.findFirst({
+      where
+    });
+
+    return !!existingEmail;
+  }
 
   ,
   // Helper method to check if specific notification type should be sent
@@ -1487,7 +1701,7 @@ async buildRoleBasedWhereClause(userId: string): Promise<any> {
         isDeleted: false
       }
     });
-   console.log(" find count ",count)
+    console.log(" find count ", count)
     return { count };
   },
 

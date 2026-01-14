@@ -82,7 +82,7 @@ router.delete(
 // Reports
 router.post(
   "/reports/:type",
-  auth("ADMIN"),
+  auth("ADMIN" , "VENDOR"),
   AdminController.generateReport
 );
 // ==================  Users =============

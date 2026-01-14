@@ -19,12 +19,9 @@ const prisma_1 = require("../../shared/prisma");
 const http_status_1 = __importDefault(require("http-status"));
 exports.ActivityLogService = {
     getUserActivity(userId_1) {
-        return __awaiter(this, arguments, void 0, function* (userId, page = 1, limit = 20, action) {
+        return __awaiter(this, arguments, void 0, function* (userId, page = 1, limit = 20, p0) {
             const skip = (page - 1) * limit;
             const where = { userId };
-            if (action) {
-                where.action = action.toUpperCase();
-            }
             const [logs, total] = yield Promise.all([
                 prisma_1.prisma.activityLog.findMany({
                     where,

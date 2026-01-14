@@ -177,9 +177,11 @@ const getReportDocument = (0, catchAsync_1.default)((req, res) => __awaiter(void
             data: null
         });
     }
+    const downloadValue = req.query.download;
+    const download = Array.isArray(downloadValue) ? downloadValue[0] : downloadValue;
     // Set headers for PDF display
     res.setHeader('Content-Type', report.documentType || 'application/pdf');
-    res.setHeader('Content-Disposition', req.query.download === 'true'
+    res.setHeader('Content-Disposition', download === 'true'
         ? `attachment; filename="${report.title.replace(/[^a-zA-Z0-9]/g, '_')}.pdf"`
         : `inline; filename="${report.title.replace(/[^a-zA-Z0-9]/g, '_')}.pdf"`);
     // Stream the file

@@ -22,9 +22,14 @@ exports.ActivityLogController = {
     // Get current user's activity
     getMyActivity: (0, catchAsync_1.default)((req, res) => __awaiter(void 0, void 0, void 0, function* () {
         const userId = req.user.userId;
-        const page = parseInt(req.query.page) || 1;
-        const limit = parseInt(req.query.limit) || 20;
-        const action = req.query.action;
+        const pageValue = req.query.page;
+        const pageStr = Array.isArray(pageValue) ? pageValue[0] : pageValue;
+        const page = parseInt(pageStr || '1', 10) || 1;
+        const limitValue = req.query.limit;
+        const limitStr = Array.isArray(limitValue) ? limitValue[0] : limitValue;
+        const limit = parseInt(limitStr || '20', 10) || 20;
+        const actionValue = req.query.action;
+        const action = Array.isArray(actionValue) ? actionValue[0] : actionValue;
         const result = yield activity_service_1.ActivityLogService.getUserActivity(userId, page, limit, action);
         (0, sendResponse_1.default)(res, {
             success: true,
@@ -40,7 +45,9 @@ exports.ActivityLogController = {
         if (((_a = req.user) === null || _a === void 0 ? void 0 : _a.role) !== "ADMIN") {
             throw new ApiError_1.default(http_status_1.default.FORBIDDEN, "Only admins can view global activity");
         }
-        const limit = parseInt(req.query.limit) || 50;
+        const limitValue = req.query.limit;
+        const limitStr = Array.isArray(limitValue) ? limitValue[0] : limitValue;
+        const limit = parseInt(limitStr || '50', 10) || 50;
         const logs = yield activity_service_1.ActivityLogService.getRecentActivity(limit);
         (0, sendResponse_1.default)(res, {
             success: true,
@@ -51,9 +58,14 @@ exports.ActivityLogController = {
     })),
     getActivityByUserId: (0, catchAsync_1.default)((req, res) => __awaiter(void 0, void 0, void 0, function* () {
         const { userId } = req.params; // ← userId from URL param
-        const page = parseInt(req.query.page) || 1;
-        const limit = parseInt(req.query.limit) || 20;
-        const action = req.query.action;
+        const pageValue = req.query.page;
+        const pageStr = Array.isArray(pageValue) ? pageValue[0] : pageValue;
+        const page = parseInt(pageStr || '1', 10) || 1;
+        const limitValue = req.query.limit;
+        const limitStr = Array.isArray(limitValue) ? limitValue[0] : limitValue;
+        const limit = parseInt(limitStr || '20', 10) || 20;
+        const actionValue = req.query.action;
+        const action = Array.isArray(actionValue) ? actionValue[0] : actionValue;
         const result = yield activity_service_1.ActivityLogService.getActivityByUserId(userId, { id: req.user.userId, role: req.user.role }, page, limit, action);
         (0, sendResponse_1.default)(res, {
             success: true,

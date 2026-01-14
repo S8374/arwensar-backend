@@ -756,6 +756,81 @@ exports.NotificationService = {
     //   }
     //   return notification;
     // }
+    // async createNotification(data: any): Promise<Notification | null> {
+    //   const targetUser = await prisma.user.findUnique({
+    //     where: { id: data.userId },
+    //     select: { id: true, email: true }
+    //   });
+    //   if (!targetUser || !targetUser.email) {
+    //     throw new ApiError(httpStatus.NOT_FOUND, "Target user not found or email missing");
+    //   }
+    //   // ===============================
+    //   // GET / CREATE PREFERENCES
+    //   // ===============================
+    //   let preferences = await prisma.notificationPreferences.findUnique({
+    //     where: { userId: data.userId }
+    //   });
+    //   if (!preferences) {
+    //     preferences = await prisma.notificationPreferences.create({
+    //       data: {
+    //         userId: data.userId,
+    //         emailNotifications: true // ✅ DEFAULT ENABLED
+    //       }
+    //     });
+    //   }
+    //   // ===============================
+    //   // 1️⃣ DB NOTIFICATION (TYPE BASED)
+    //   // ===============================
+    //   const allowDbNotification = this.shouldSendNotificationForType(
+    //     data.type,
+    //     preferences
+    //   );
+    //   let notification: Notification | null = null;
+    //   if (allowDbNotification) {
+    //     notification = await prisma.notification.create({
+    //       data: {
+    //         userId: data.userId,
+    //         title: data.title,
+    //         message: data.message,
+    //         type: data.type,
+    //         metadata: data.metadata || {},
+    //         priority: data.priority || "MEDIUM"
+    //       }
+    //     });
+    //   } else {
+    //     console.log(
+    //       `[DB Notification Skipped] type=${data.type}, user=${data.userId}`
+    //     );
+    //   }
+    //   // ===============================
+    //   // 2️⃣ EMAIL (GLOBAL SWITCH)
+    //   // ===============================
+    //   if (!preferences.emailNotifications) {
+    //     console.log(`[Email Disabled by User] user=${data.userId}`);
+    //     return notification;
+    //   }
+    //   // if (this.isInQuietHours(preferences)) {
+    //   //   console.log(`[Email Blocked by Quiet Hours] user=${data.userId}`);
+    //   //   return notification;
+    //   // }
+    //   // ===============================
+    //   // 3️⃣ SEND EMAIL
+    //   // ===============================
+    //   try {
+    //     await mailtrapService.sendHtmlEmail({
+    //       to: targetUser.email,
+    //       subject: data.title,
+    //       html: this.generateEmailTemplate(data, targetUser)
+    //     });
+    //     console.log(
+    //       `[Email Sent] to=${targetUser.email}, type=${data.type}`
+    //     );
+    //   } catch (error) {
+    //     console.error(`[Email Failed]`, error);
+    //   }
+    //   return notification;
+    // }
+    // ========== CREATE NOTIFICATION (UPDATED WITH ENHANCED DUPLICATE PREVENTION) ==========
     createNotification(data) {
         return __awaiter(this, void 0, void 0, function* () {
             const targetUser = yield prisma_1.prisma.user.findUnique({
@@ -766,7 +841,15 @@ exports.NotificationService = {
                 throw new ApiError_1.default(http_status_1.default.NOT_FOUND, "Target user not found or email missing");
             }
             // ===============================
-            // GET / CREATE PREFERENCES
+            // 1️⃣ CHECK FOR RECENT DUPLICATE NOTIFICATION
+            // ===============================
+            const duplicateCheck = yield this.checkForDuplicateNotification(data);
+            if (duplicateCheck.isDuplicate) {
+                console.log(`[Duplicate Blocked] type=${data.type}, user=${data.userId}, supplier=${duplicateCheck.supplierId || 'N/A'}`);
+                return null;
+            }
+            // ===============================
+            // 2️⃣ GET / CREATE PREFERENCES
             // ===============================
             let preferences = yield prisma_1.prisma.notificationPreferences.findUnique({
                 where: { userId: data.userId }
@@ -775,23 +858,25 @@ exports.NotificationService = {
                 preferences = yield prisma_1.prisma.notificationPreferences.create({
                     data: {
                         userId: data.userId,
-                        emailNotifications: true // ✅ DEFAULT ENABLED
+                        emailNotifications: true
                     }
                 });
             }
             // ===============================
-            // 1️⃣ DB NOTIFICATION (TYPE BASED)
+            // 3️⃣ DB NOTIFICATION (TYPE BASED)
             // ===============================
             const allowDbNotification = this.shouldSendNotificationForType(data.type, preferences);
             let notification = null;
             if (allowDbNotification) {
+                // Add metadata to track email status
+                const metadata = Object.assign(Object.assign({}, (data.metadata || {})), { emailSent: false, notificationCreatedAt: new Date().toISOString() });
                 notification = yield prisma_1.prisma.notification.create({
                     data: {
                         userId: data.userId,
                         title: data.title,
                         message: data.message,
                         type: data.type,
-                        metadata: data.metadata || {},
+                        metadata: metadata,
                         priority: data.priority || "MEDIUM"
                     }
                 });
@@ -800,10 +885,15 @@ exports.NotificationService = {
                 console.log(`[DB Notification Skipped] type=${data.type}, user=${data.userId}`);
             }
             // ===============================
-            // 2️⃣ EMAIL (GLOBAL SWITCH)
+            // 4️⃣ EMAIL (GLOBAL SWITCH & DUPLICATE CHECK)
             // ===============================
             if (!preferences.emailNotifications) {
                 console.log(`[Email Disabled by User] user=${data.userId}`);
+                return notification;
+            }
+            // Check if email already sent today for this type and entity
+            if (yield this.hasEmailBeenSentToday(data)) {
+                console.log(`[Email Already Sent Today] type=${data.type}, user=${data.userId}`);
                 return notification;
             }
             // if (this.isInQuietHours(preferences)) {
@@ -811,7 +901,7 @@ exports.NotificationService = {
             //   return notification;
             // }
             // ===============================
-            // 3️⃣ SEND EMAIL
+            // 5️⃣ SEND EMAIL
             // ===============================
             try {
                 yield mailtrap_service_1.mailtrapService.sendHtmlEmail({
@@ -819,12 +909,102 @@ exports.NotificationService = {
                     subject: data.title,
                     html: this.generateEmailTemplate(data, targetUser)
                 });
+                // Update notification metadata to mark email as sent
+                if (notification) {
+                    const updatedMetadata = Object.assign(Object.assign({}, (notification.metadata || {})), { emailSent: true, emailSentAt: new Date().toISOString() });
+                    yield prisma_1.prisma.notification.update({
+                        where: { id: notification.id },
+                        data: { metadata: updatedMetadata }
+                    });
+                }
                 console.log(`[Email Sent] to=${targetUser.email}, type=${data.type}`);
             }
             catch (error) {
                 console.error(`[Email Failed]`, error);
             }
             return notification;
+        });
+    },
+    // ========== CHECK FOR DUPLICATE NOTIFICATION ==========
+    checkForDuplicateNotification(data) {
+        return __awaiter(this, void 0, void 0, function* () {
+            const today = new Date();
+            today.setHours(0, 0, 0, 0);
+            const metadata = data.metadata || {};
+            // Build query based on notification type and metadata
+            const where = {
+                userId: data.userId,
+                type: data.type,
+                createdAt: { gte: today },
+                isDeleted: false
+            };
+            // Check for specific entity duplicates
+            if (metadata.supplierId) {
+                where.metadata = {
+                    path: ['supplierId'],
+                    equals: metadata.supplierId
+                };
+            }
+            else if (metadata.vendorId) {
+                where.metadata = {
+                    path: ['vendorId'],
+                    equals: metadata.vendorId
+                };
+            }
+            else {
+                // For general notifications, check by title/message
+                where.OR = [
+                    { title: data.title },
+                    {
+                        AND: [
+                            { message: data.message },
+                            { type: data.type }
+                        ]
+                    }
+                ];
+            }
+            const existingNotification = yield prisma_1.prisma.notification.findFirst({
+                where
+            });
+            return {
+                isDuplicate: !!existingNotification,
+                supplierId: metadata.supplierId,
+                vendorId: metadata.vendorId
+            };
+        });
+    },
+    // ========== CHECK IF EMAIL ALREADY SENT TODAY ==========
+    hasEmailBeenSentToday(data) {
+        return __awaiter(this, void 0, void 0, function* () {
+            const today = new Date();
+            today.setHours(0, 0, 0, 0);
+            const metadata = data.metadata || {};
+            const where = {
+                userId: data.userId,
+                type: data.type,
+                metadata: {
+                    path: ['emailSent'],
+                    equals: true
+                },
+                createdAt: { gte: today }
+            };
+            // Add entity-specific check
+            if (metadata.supplierId) {
+                where.metadata = {
+                    path: ['supplierId'],
+                    equals: metadata.supplierId
+                };
+            }
+            if (metadata.vendorId) {
+                where.metadata = {
+                    path: ['vendorId'],
+                    equals: metadata.vendorId
+                };
+            }
+            const existingEmail = yield prisma_1.prisma.notification.findFirst({
+                where
+            });
+            return !!existingEmail;
         });
     },
     // Helper method to check if specific notification type should be sent

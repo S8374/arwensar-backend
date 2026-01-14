@@ -156,7 +156,7 @@ const uploadToMinIO = async (
   // Return lifetime URL
   const endpoint = process.env.MINIO_ENDPOINT || 'localhost';
   const port = process.env.MINIO_PORT || 9000;
-  const protocol = process.env.MINIO_USE_SSL === 'true' ? 'https' : 'http';
+  const protocol = process.env.MINIO_USE_SSL === 'true' ? 'http' : 'http';
   const lifetimeUrl = `${protocol}://${endpoint}:${port}/${BUCKET_NAME}/${objectName}`;
 
   return lifetimeUrl;

@@ -30,7 +30,7 @@ router.get("/vendors", (0, auth_1.default)("ADMIN"), admin_controller_1.AdminCon
 router.get("/suppliers", (0, auth_1.default)("ADMIN"), admin_controller_1.AdminController.getAllSuppliers);
 router.delete("/suppliers/:id", (0, auth_1.default)("ADMIN", "VENDOR"), admin_controller_1.AdminController.deleteSupplier);
 // Reports
-router.post("/reports/:type", (0, auth_1.default)("ADMIN"), admin_controller_1.AdminController.generateReport);
+router.post("/reports/:type", (0, auth_1.default)("ADMIN", "VENDOR"), admin_controller_1.AdminController.generateReport);
 // ==================  Users =============
 router.get("/all-users", (0, auth_1.default)("ADMIN"), admin_controller_1.AdminController.getAllUsers);
 router.patch("/user/:userId", (0, auth_1.default)("ADMIN"), admin_controller_1.AdminController.updateUsers);

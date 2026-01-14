@@ -60,8 +60,8 @@ model Vendor {
   isDeleted Boolean @default(false) @map("is_deleted")
   isActive  Boolean @default(true) @map("is_active")
 
-  stripeCustomerId String? @unique @map("stripe_customer_id") // ADD THIS
-  stripeAccountId  String? @unique @map("stripe_account_id") // ADD THIS
+  stripeCustomerId String? @unique @map("stripe_customer_id") 
+  stripeAccountId  String? @unique @map("stripe_account_id") 
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")

@@ -43,9 +43,6 @@ const updatePlan = (0, catchAsync_1.default)((req, res) => __awaiter(void 0, voi
     const { planId } = req.params;
     // Extract data - check for data property first, then body, then direct
     const data = req.body.data || req.body.body || req.body;
-    console.log("Plan update details", req.body); // Log the full body
-    console.log("Extracted data:", data); // Log what we extracted
-    console.log("Plan planId", planId);
     if (!data) {
         throw new ApiError_1.default(http_status_1.default.BAD_REQUEST, "No data provided for update");
     }
@@ -268,7 +265,6 @@ const permanentDeleteUser = (0, catchAsync_1.default)((req, res) => __awaiter(vo
 const updateAssessment = (0, catchAsync_1.default)((req, res) => __awaiter(void 0, void 0, void 0, function* () {
     var _a;
     const { assessmentId } = req.params;
-    console.log("Assainment Update fiend", req.body);
     const assessment = yield admin_service_1.AdminService.updateAssessment(assessmentId, Object.assign(Object.assign({}, req.body), { updatedBy: (_a = req.user) === null || _a === void 0 ? void 0 : _a.userId }));
     (0, sendResponse_1.default)(res, {
         statusCode: http_status_1.default.OK,
@@ -303,12 +299,21 @@ const getAssessmentById = (0, catchAsync_1.default)((req, res) => __awaiter(void
 // Fix: Add pagination support to getAllUsers (currently broken – using users.meta incorrectly)
 const getAllUsers = (0, catchAsync_1.default)((req, res) => __awaiter(void 0, void 0, void 0, function* () {
     const pagination = paginationHelper_1.paginationHelper.calculatePagination(req.query);
+    const roleValue = req.query.role;
+    const role = Array.isArray(roleValue) ? roleValue[0] : roleValue;
+    const statusValue = req.query.status;
+    const status = Array.isArray(statusValue) ? statusValue[0] : statusValue;
+    const searchValue = req.query.search;
+    const search = Array.isArray(searchValue) ? searchValue[0] : searchValue;
+    const isVerifiedValue = req.query.isVerified;
+    const isVerifiedStr = Array.isArray(isVerifiedValue) ? isVerifiedValue[0] : isVerifiedValue;
+    const isVerified = isVerifiedStr ? isVerifiedStr === 'true' : undefined;
     const filters = {
-        // you can extract more filters from query if needed
-        role: req.query.role,
-        status: req.query.status,
-        search: req.query.search,
-        isVerified: req.query.isVerified ? req.query.isVerified === 'true' : undefined,
+        // you can add more filters if needed
+        role: role,
+        status: status,
+        search: search,
+        isVerified,
     };
     const { users, meta } = yield admin_service_1.AdminService.getAllUsers(filters, pagination);
     (0, sendResponse_1.default)(res, {

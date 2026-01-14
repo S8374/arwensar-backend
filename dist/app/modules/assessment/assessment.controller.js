@@ -237,7 +237,9 @@ const requestEvidence = (0, catchAsync_1.default)((req, res) => __awaiter(void 0
             data: null
         });
     }
-    const answer = yield assessment_service_1.AssessmentService.requestEvidence(answerId, userId, req.body.reason);
+    const reasonValue = req.body.reason;
+    const reason = Array.isArray(reasonValue) ? reasonValue[0] : reasonValue;
+    const answer = yield assessment_service_1.AssessmentService.requestEvidence(answerId, userId, reason);
     (0, sendResponse_1.default)(res, {
         statusCode: http_status_1.default.OK,
         success: true,
