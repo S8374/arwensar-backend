@@ -19,13 +19,13 @@ router.get(
 router.post(
   "/plans",
   auth("ADMIN"),
+
   AdminController.createPlan
 );
 
 router.patch(
   "/plans/:planId",
   auth("ADMIN"),
-  validateRequest(updatePlanSchema),
   AdminController.updatePlan
 );
 
@@ -117,6 +117,12 @@ router.post(
   auth("ADMIN"),
   AdminController.bulkDeleteUsers
 );
+router.get(
+  "/:userId",
+  auth("ADMIN"),
+  AdminController.getUserById
+);
+
 router.post("/users/bulk-update", auth("ADMIN"), AdminController.bulkUpdateUsers);
 router.post("/users/bulk-block", auth("ADMIN"), AdminController.bulkBlockUsers);
 router.post("/users/bulk-verify", auth("ADMIN"), AdminController.bulkVerifyUsers);

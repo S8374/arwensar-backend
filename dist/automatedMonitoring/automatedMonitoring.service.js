@@ -501,7 +501,6 @@ class MonitoringQueueService {
                         where: {
                             userId: supplier.user.id,
                             type: 'ASSESSMENT_DUE',
-                            metadata: { path: ['supplierId'], equals: supplier.id },
                             createdAt: { gte: twoDaysAgo }
                         }
                     });

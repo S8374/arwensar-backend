@@ -72,7 +72,6 @@ export class MailtrapService {
         category,
       });
 
-      console.log(`✅ HTML email sent to ${to} via Mailtrap. Message ID: ${response.message_ids?.[0]}`);
       return response;
     } catch (error: any) {
       console.error("Mailtrap HTML email sending error:", error);
@@ -122,7 +121,6 @@ export class MailtrapService {
       }
 
       const response = await this.client.send(emailOptions);
-      console.log(`✅ Email sent to ${to}. Message ID: ${response.message_ids?.[0]}`);
       
       return response;
     } catch (error: any) {
@@ -514,7 +512,6 @@ export class MailtrapService {
         text: "Mailtrap Connection Test - This is a test email to verify your Mailtrap configuration is working correctly.",
       });
 
-      console.log("✅ Mailtrap connection test successful");
       return testResponse;
     } catch (error: any) {
       console.error("❌ Mailtrap connection test failed:", error);

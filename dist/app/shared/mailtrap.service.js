@@ -33,7 +33,6 @@ class MailtrapService {
      */
     sendHtmlEmail(options) {
         return __awaiter(this, void 0, void 0, function* () {
-            var _a;
             try {
                 const { to, subject, html, text, category = "General" } = options;
                 const sender = {
@@ -53,7 +52,6 @@ class MailtrapService {
                     text: text || this.htmlToText(html),
                     category,
                 });
-                console.log(`✅ HTML email sent to ${to} via Mailtrap. Message ID: ${(_a = response.message_ids) === null || _a === void 0 ? void 0 : _a[0]}`);
                 return response;
             }
             catch (error) {
@@ -67,7 +65,6 @@ class MailtrapService {
      */
     sendEmail(options) {
         return __awaiter(this, void 0, void 0, function* () {
-            var _a;
             try {
                 const { to, template_uuid, template_variables, html, text, subject, attachments } = options;
                 const sender = {
@@ -101,7 +98,6 @@ class MailtrapService {
                     emailOptions.attachments = attachments;
                 }
                 const response = yield this.client.send(emailOptions);
-                console.log(`✅ Email sent to ${to}. Message ID: ${(_a = response.message_ids) === null || _a === void 0 ? void 0 : _a[0]}`);
                 return response;
             }
             catch (error) {
@@ -466,7 +462,6 @@ class MailtrapService {
         `,
                     text: "Mailtrap Connection Test - This is a test email to verify your Mailtrap configuration is working correctly.",
                 });
-                console.log("✅ Mailtrap connection test successful");
                 return testResponse;
             }
             catch (error) {

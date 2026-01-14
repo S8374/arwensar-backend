@@ -681,19 +681,7 @@ exports.NotificationService = {
                         return Object.assign(Object.assign({}, baseWhere), { userId });
                     }
                     return Object.assign(Object.assign({}, baseWhere), { OR: [
-                            { userId },
-                            {
-                                metadata: {
-                                    path: ['supplierId'],
-                                    equals: user.supplierId
-                                }
-                            },
-                            {
-                                metadata: {
-                                    path: ['receiverSupplierId'],
-                                    equals: user.supplierId
-                                }
-                            }
+                            { userId }
                         ] });
                 }
                 default:

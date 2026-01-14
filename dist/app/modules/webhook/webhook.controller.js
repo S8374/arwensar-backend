@@ -54,10 +54,8 @@ const handleWebhook = (0, catchAsync_1.default)((req, res) => __awaiter(void 0, 
             yield payment_service_1.PaymentService.handleInvoicePaymentFailed(event.data.object);
             break;
         case "payment_intent.succeeded":
-            console.log("Payment intent succeeded:", event.data.object.id);
             break;
         case "payment_intent.payment_failed":
-            console.log("Payment intent failed:", event.data.object.id);
             break;
         default:
         //  console.log(`⚠️ Unhandled event type: ${event.type}`);

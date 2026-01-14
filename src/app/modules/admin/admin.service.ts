@@ -300,6 +300,8 @@ export const AdminService = {
   },
 
   async updatePlan(planId: string, data: Partial<any>): Promise<Plan> {
+
+
     const plan = await prisma.plan.findUnique({ where: { id: planId } });
     if (!plan) throw new ApiError(httpStatus.NOT_FOUND, "Plan not found");
     if (plan.isDeleted) throw new ApiError(httpStatus.BAD_REQUEST, "Cannot update deleted plan");
@@ -344,7 +346,7 @@ export const AdminService = {
       console.error("Stripe update failed:", stripeError);
       throw new ApiError(httpStatus.INTERNAL_SERVER_ERROR, `Failed to sync with Stripe: ${stripeError.message}`);
     }
-
+    console.log("Find update data ", plan);
     // Update DB
     const updatedPlan = await prisma.plan.update({
       where: { id: planId },
@@ -366,7 +368,7 @@ export const AdminService = {
         stripePriceId: newStripePriceId,
       },
     });
-
+    console.log("Updated data", updatedPlan);
     return updatedPlan;
   },
 
@@ -1256,7 +1258,7 @@ export const AdminService = {
             `}
             
             <div style="text-align: center; margin: 30px 0;">
-              <a href="${process.env.FRONTEND_URL}/login" style="background-color: #007bff; color: white; padding: 12px 30px; text-decoration: none; border-radius: 5px; font-weight: bold;">
+              <a href="${process.env.FRONTEND_URL}/loginvendor" style="background-color: #007bff; color: white; padding: 12px 30px; text-decoration: none; border-radius: 5px; font-weight: bold;">
                 Go to Login
               </a>
             </div>
@@ -1994,5 +1996,44 @@ export const AdminService = {
     }
 
     return where;
+  },
+
+
+  async getUserById(userId: string): Promise<User> {
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      include: {
+        vendorProfile: {
+          select: {
+            id: true,
+            companyName: true,
+            businessEmail: true,
+            isActive: true,
+            suppliers: true
+          },
+        },
+        supplierProfile: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+          },
+        },
+        subscription: true,
+        _count: {
+          select: {
+            activityLogs: true,
+            notifications: true,
+          },
+        },
+      },
+    });
+
+    if (!user) {
+      throw new ApiError(httpStatus.NOT_FOUND, "User not found");
+    }
+
+    return user;
   }
+
 };

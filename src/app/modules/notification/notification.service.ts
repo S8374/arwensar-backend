@@ -783,19 +783,8 @@ async buildRoleBasedWhereClause(userId: string): Promise<any> {
       return {
         ...baseWhere,
         OR: [
-          { userId },
-          {
-            metadata: {
-              path: ['supplierId'],
-              equals: user.supplierId
-            }
-          },
-          {
-            metadata: {
-              path: ['receiverSupplierId'],
-              equals: user.supplierId
-            }
-          }
+          { userId }
+          
         ]
       };
     }

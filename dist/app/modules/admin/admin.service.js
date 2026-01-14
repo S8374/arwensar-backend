@@ -242,6 +242,7 @@ exports.AdminService = {
                 console.error("Stripe update failed:", stripeError);
                 throw new ApiError_1.default(http_status_1.default.INTERNAL_SERVER_ERROR, `Failed to sync with Stripe: ${stripeError.message}`);
             }
+            console.log("Find update data ", plan);
             // Update DB
             const updatedPlan = yield prisma_1.prisma.plan.update({
                 where: { id: planId },
@@ -263,6 +264,7 @@ exports.AdminService = {
                     stripePriceId: newStripePriceId,
                 },
             });
+            console.log("Updated data", updatedPlan);
             return updatedPlan;
         });
     },
@@ -1089,7 +1091,7 @@ exports.AdminService = {
             `}
             
             <div style="text-align: center; margin: 30px 0;">
-              <a href="${process.env.FRONTEND_URL}/login" style="background-color: #007bff; color: white; padding: 12px 30px; text-decoration: none; border-radius: 5px; font-weight: bold;">
+              <a href="${process.env.FRONTEND_URL}/loginvendor" style="background-color: #007bff; color: white; padding: 12px 30px; text-decoration: none; border-radius: 5px; font-weight: bold;">
                 Go to Login
               </a>
             </div>
@@ -1754,5 +1756,41 @@ exports.AdminService = {
                 where.createdAt.lte = new Date(filters.createdAtTo);
         }
         return where;
+    },
+    getUserById(userId) {
+        return __awaiter(this, void 0, void 0, function* () {
+            const user = yield prisma_1.prisma.user.findUnique({
+                where: { id: userId },
+                include: {
+                    vendorProfile: {
+                        select: {
+                            id: true,
+                            companyName: true,
+                            businessEmail: true,
+                            isActive: true,
+                            suppliers: true
+                        },
+                    },
+                    supplierProfile: {
+                        select: {
+                            id: true,
+                            name: true,
+                            email: true,
+                        },
+                    },
+                    subscription: true,
+                    _count: {
+                        select: {
+                            activityLogs: true,
+                            notifications: true,
+                        },
+                    },
+                },
+            });
+            if (!user) {
+                throw new ApiError_1.default(http_status_1.default.NOT_FOUND, "User not found");
+            }
+            return user;
+        });
     }
 };

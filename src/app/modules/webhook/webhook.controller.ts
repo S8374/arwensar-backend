@@ -51,11 +51,9 @@ const handleWebhook = catchAsync(async (req: Request, res: Response) => {
       break;
 
     case "payment_intent.succeeded":
-      console.log("Payment intent succeeded:", event.data.object.id);
       break;
 
     case "payment_intent.payment_failed":
-      console.log("Payment intent failed:", event.data.object.id);
       break;
 
     default:

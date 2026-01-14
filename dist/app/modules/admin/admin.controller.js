@@ -18,6 +18,7 @@ const http_status_1 = __importDefault(require("http-status"));
 const admin_service_1 = require("./admin.service");
 const paginationHelper_1 = require("../../helper/paginationHelper");
 const catchAsync_1 = __importDefault(require("../../shared/catchAsync"));
+const ApiError_1 = __importDefault(require("../../../error/ApiError"));
 const getDashboardStats = (0, catchAsync_1.default)((req, res) => __awaiter(void 0, void 0, void 0, function* () {
     const stats = yield admin_service_1.AdminService.getDashboardStats();
     (0, sendResponse_1.default)(res, {
@@ -29,6 +30,7 @@ const getDashboardStats = (0, catchAsync_1.default)((req, res) => __awaiter(void
 }));
 const createPlan = (0, catchAsync_1.default)((req, res) => __awaiter(void 0, void 0, void 0, function* () {
     var _a;
+    console.log("Plan craete", req.body);
     const plan = yield admin_service_1.AdminService.createPlan(Object.assign(Object.assign({}, req.body), { createdBy: (_a = req.user) === null || _a === void 0 ? void 0 : _a.userId }));
     (0, sendResponse_1.default)(res, {
         statusCode: http_status_1.default.CREATED,
@@ -39,7 +41,15 @@ const createPlan = (0, catchAsync_1.default)((req, res) => __awaiter(void 0, voi
 }));
 const updatePlan = (0, catchAsync_1.default)((req, res) => __awaiter(void 0, void 0, void 0, function* () {
     const { planId } = req.params;
-    const plan = yield admin_service_1.AdminService.updatePlan(planId, req.body);
+    // Extract data - check for data property first, then body, then direct
+    const data = req.body.data || req.body.body || req.body;
+    console.log("Plan update details", req.body); // Log the full body
+    console.log("Extracted data:", data); // Log what we extracted
+    console.log("Plan planId", planId);
+    if (!data) {
+        throw new ApiError_1.default(http_status_1.default.BAD_REQUEST, "No data provided for update");
+    }
+    const plan = yield admin_service_1.AdminService.updatePlan(planId, data);
     (0, sendResponse_1.default)(res, {
         statusCode: http_status_1.default.OK,
         success: true,
@@ -78,6 +88,7 @@ const getPlanById = (0, catchAsync_1.default)((req, res) => __awaiter(void 0, vo
 }));
 const createAssessment = (0, catchAsync_1.default)((req, res) => __awaiter(void 0, void 0, void 0, function* () {
     var _a;
+    console.log("Assainment Create", req.body);
     const assessment = yield admin_service_1.AdminService.createAssessment(Object.assign(Object.assign({}, req.body), { createdBy: (_a = req.user) === null || _a === void 0 ? void 0 : _a.userId }));
     (0, sendResponse_1.default)(res, {
         statusCode: http_status_1.default.CREATED,
@@ -147,17 +158,6 @@ const generateReport = (0, catchAsync_1.default)((req, res) => __awaiter(void 0,
     });
 }));
 //============== USER =====================
-const getAllUsers = (0, catchAsync_1.default)((req, res) => __awaiter(void 0, void 0, void 0, function* () {
-    const pagination = paginationHelper_1.paginationHelper.calculatePagination(req.query);
-    const users = yield admin_service_1.AdminService.getAllUsers();
-    (0, sendResponse_1.default)(res, {
-        statusCode: http_status_1.default.OK,
-        success: true,
-        message: "Vendors retrieved successfully",
-        data: users,
-        meta: users.meta
-    });
-}));
 const updateUsers = (0, catchAsync_1.default)((req, res) => __awaiter(void 0, void 0, void 0, function* () {
     const { userId } = req.params;
     const data = req.body;
@@ -183,6 +183,7 @@ const toggleUserBlock = (0, catchAsync_1.default)((req, res) => __awaiter(void 0
     const { userId } = req.params;
     const { block, reason } = req.body;
     const updatedUser = yield admin_service_1.AdminService.toggleUserBlock(userId, block, reason);
+    console.log("userId", userId);
     (0, sendResponse_1.default)(res, {
         statusCode: http_status_1.default.OK,
         success: true,
@@ -264,6 +265,71 @@ const permanentDeleteUser = (0, catchAsync_1.default)((req, res) => __awaiter(vo
         data: result
     });
 }));
+const updateAssessment = (0, catchAsync_1.default)((req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    var _a;
+    const { assessmentId } = req.params;
+    console.log("Assainment Update fiend", req.body);
+    const assessment = yield admin_service_1.AdminService.updateAssessment(assessmentId, Object.assign(Object.assign({}, req.body), { updatedBy: (_a = req.user) === null || _a === void 0 ? void 0 : _a.userId }));
+    (0, sendResponse_1.default)(res, {
+        statusCode: http_status_1.default.OK,
+        success: true,
+        message: "Assessment updated successfully",
+        data: assessment
+    });
+}));
+const deleteAssessment = (0, catchAsync_1.default)((req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    const { assessmentId } = req.params;
+    const result = yield admin_service_1.AdminService.deleteAssessment(assessmentId);
+    (0, sendResponse_1.default)(res, {
+        statusCode: http_status_1.default.OK,
+        success: true,
+        message: "Assessment deactivated successfully",
+        data: result
+    });
+}));
+const getAssessmentById = (0, catchAsync_1.default)((req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    const { assessmentId } = req.params;
+    const assessment = yield admin_service_1.AdminService.getAssessmentById(assessmentId);
+    if (!assessment) {
+        throw new ApiError_1.default(http_status_1.default.NOT_FOUND, "Assessment not found");
+    }
+    (0, sendResponse_1.default)(res, {
+        statusCode: http_status_1.default.OK,
+        success: true,
+        message: "Assessment retrieved successfully",
+        data: assessment
+    });
+}));
+// Fix: Add pagination support to getAllUsers (currently broken – using users.meta incorrectly)
+const getAllUsers = (0, catchAsync_1.default)((req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    const pagination = paginationHelper_1.paginationHelper.calculatePagination(req.query);
+    const filters = {
+        // you can extract more filters from query if needed
+        role: req.query.role,
+        status: req.query.status,
+        search: req.query.search,
+        isVerified: req.query.isVerified ? req.query.isVerified === 'true' : undefined,
+    };
+    const { users, meta } = yield admin_service_1.AdminService.getAllUsers(filters, pagination);
+    (0, sendResponse_1.default)(res, {
+        statusCode: http_status_1.default.OK,
+        success: true,
+        message: "Users retrieved successfully",
+        data: users,
+        meta
+    });
+}));
+// Also recommended: paginated vendors & suppliers
+const getUserById = (0, catchAsync_1.default)((req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    const { userId } = req.params;
+    const result = yield admin_service_1.AdminService.getUserById(userId);
+    (0, sendResponse_1.default)(res, {
+        statusCode: http_status_1.default.OK,
+        success: true,
+        message: "User retrieved successfully",
+        data: result,
+    });
+}));
 exports.AdminController = {
     getDashboardStats,
     createPlan,
@@ -273,6 +339,8 @@ exports.AdminController = {
     getPlanById,
     createAssessment,
     getAllAssessments,
+    deleteAssessment,
+    updateAssessment,
     getAllVendors,
     getAllSuppliers,
     generateReport,
@@ -280,12 +348,14 @@ exports.AdminController = {
     updateUsers,
     deleteUser,
     toggleUserBlock,
-    bulkDeleteUsers,
-    bulkBlockUsers,
+    bulkDeleteUsers, //need
+    bulkBlockUsers, //need
     bulkVerifyUsers,
     deactivateInactiveUsers,
     exportUsersToCSV,
     bulkUpdateUsers,
     permanentDeleteUser,
-    deleteSupplier
+    deleteSupplier,
+    getUserById,
+    getAssessmentById
 };

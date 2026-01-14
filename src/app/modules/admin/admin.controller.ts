@@ -20,11 +20,12 @@ const getDashboardStats = catchAsync(async (req: Request, res: Response) => {
 });
 
 const createPlan = catchAsync(async (req: Request, res: Response) => {
+   console.log("Plan craete" ,req.body);
+
   const plan = await AdminService.createPlan({
     ...req.body,
     createdBy: req.user?.userId
   });
-
   sendResponse(res, {
     statusCode: httpStatus.CREATED,
     success: true,
@@ -35,8 +36,20 @@ const createPlan = catchAsync(async (req: Request, res: Response) => {
 
 const updatePlan = catchAsync(async (req: Request, res: Response) => {
   const { planId } = req.params;
-  const plan = await AdminService.updatePlan(planId, req.body);
-
+  
+  // Extract data - check for data property first, then body, then direct
+  const data = req.body.data || req.body.body || req.body;
+  
+  console.log("Plan update details", req.body);  // Log the full body
+  console.log("Extracted data:", data);         // Log what we extracted
+  console.log("Plan planId", planId);
+  
+  if (!data) {
+    throw new ApiError(httpStatus.BAD_REQUEST, "No data provided for update");
+  }
+  
+  const plan = await AdminService.updatePlan(planId, data);
+  
   sendResponse(res, {
     statusCode: httpStatus.OK,
     success: true,
@@ -81,6 +94,8 @@ const getPlanById = catchAsync(async (req: Request, res: Response) => {
 });
 
 const createAssessment = catchAsync(async (req: Request, res: Response) => {
+
+  console.log("Assainment Create",req.body);
   const assessment = await AdminService.createAssessment({
     ...req.body,
     createdBy: req.user?.userId
@@ -283,6 +298,7 @@ const permanentDeleteUser = catchAsync(async (req: Request, res: Response) => {
 });
 const updateAssessment = catchAsync(async (req: Request, res: Response) => {
   const { assessmentId } = req.params;
+  console.log("Assainment Update fiend",req.body)
   const assessment = await AdminService.updateAssessment(assessmentId, {
     ...req.body,
     updatedBy: req.user?.userId
@@ -349,6 +365,18 @@ const getAllUsers = catchAsync(async (req: Request, res: Response) => {
 });
 
 // Also recommended: paginated vendors & suppliers
+const getUserById = catchAsync(async (req, res) => {
+  const { userId } = req.params;
+
+  const result = await AdminService.getUserById(userId);
+
+  sendResponse(res, {
+    statusCode: httpStatus.OK,
+    success: true,
+    message: "User retrieved successfully",
+    data: result,
+  });
+});
 
 export const AdminController = {
   getDashboardStats,
@@ -368,12 +396,14 @@ export const AdminController = {
   updateUsers,
   deleteUser,
   toggleUserBlock,
-  bulkDeleteUsers,
-  bulkBlockUsers,
+  bulkDeleteUsers, //need
+  bulkBlockUsers, //need
   bulkVerifyUsers,
   deactivateInactiveUsers,
   exportUsersToCSV,
   bulkUpdateUsers,
   permanentDeleteUser,
-  deleteSupplier
+  deleteSupplier,
+  getUserById,
+  getAssessmentById
 };

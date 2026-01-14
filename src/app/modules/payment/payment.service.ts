@@ -475,7 +475,7 @@ export const PaymentService = {
                 <p>Your new plan is now active. You can continue using the platform with your updated limits.</p>
                 
                 <div style="text-align: center; margin: 35px 0;">
-                  <a href="${config.FRONTEND_URL}/dashboard" style="background-color: #1a5fb4; color: white; padding: 14px 32px; text-decoration: none; border-radius: 6px; font-weight: bold; font-size: 16px;">
+                  <a href="${config.FRONTEND_URL}/loginvendor" style="background-color: #1a5fb4; color: white; padding: 14px 32px; text-decoration: none; border-radius: 6px; font-weight: bold; font-size: 16px;">
                     Go to Dashboard →
                   </a>
                 </div>
@@ -596,7 +596,7 @@ export const PaymentService = {
             <p>You now have full access to all features. Explore the platform and see how CyberNark can help secure your supply chain.</p>
             
             <div style="text-align: center; margin: 35px 0;">
-              <a href="${config.FRONTEND_URL}/dashboard" style="background-color: #1a5fb4; color: white; padding: 14px 32px; text-decoration: none; border-radius: 6px; font-weight: bold; font-size: 16px;">
+              <a href="${config.FRONTEND_URL}/loginvendor" style="background-color: #1a5fb4; color: white; padding: 14px 32px; text-decoration: none; border-radius: 6px; font-weight: bold; font-size: 16px;">
                 Go to Dashboard →
               </a>
             </div>
