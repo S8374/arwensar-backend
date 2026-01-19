@@ -63,7 +63,7 @@ const updateSupplierProfile = catchAsync(async (req: Request, res: Response) => 
     });
   }
 
-  const profile = await SupplierService.updateSupplierProfile(supplierId, req.body);
+  const profile = await SupplierService.updateSupplierProfile(supplierId as string, req.body);
 
   sendResponse(res, {
     statusCode: httpStatus.OK,
@@ -110,8 +110,8 @@ const startAssessment = catchAsync(async (req: Request, res: Response) => {
   }
 
   const result = await SupplierService.startAssessment(
-    assessmentId,
-    supplierId,
+    assessmentId as string,
+    supplierId as string,
     req.user?.userId || ""
   );
 
@@ -127,8 +127,8 @@ const saveAnswer = catchAsync(async (req: Request, res: Response) => {
   const { submissionId, questionId } = req.params;
 
   const result = await SupplierService.saveAnswer(
-    submissionId,
-    questionId,
+    submissionId as string,
+    questionId as string,
     req.body,
     req.user?.userId || ""
   );
@@ -145,7 +145,7 @@ const submitAssessment = catchAsync(async (req: Request, res: Response) => {
   const { submissionId } = req.params;
 
   const result = await SupplierService.submitAssessment(
-    submissionId,
+    submissionId as string,
     req.user?.userId || ""
   );
 
@@ -159,7 +159,7 @@ const submitAssessment = catchAsync(async (req: Request, res: Response) => {
 const verifyInvitation = catchAsync(async (req: Request, res: Response) => {
   const { token } = req.params;
 
-  const result = await SupplierService.verifyInvitationToken(token);
+  const result = await SupplierService.verifyInvitationToken(token as string);
 
   sendResponse(res, {
     statusCode: httpStatus.OK,

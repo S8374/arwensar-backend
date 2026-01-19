@@ -100,7 +100,7 @@ const getDocumentById = catchAsync(async (req: Request, res: Response) => {
         });
     }
 
-    const document = await DocumentService.getDocumentById(documentId, userId);
+    const document = await DocumentService.getDocumentById(documentId as string, userId as string);
 
     sendResponse(res, {
         statusCode: httpStatus.OK,
@@ -125,7 +125,7 @@ const updateDocument = catchAsync(async (req: Request, res: Response) => {
         });
     }
 
-    const document = await DocumentService.updateDocument(documentId, userId, req.body);
+    const document = await DocumentService.updateDocument(documentId as string, userId as string, req.body);
 
     sendResponse(res, {
         statusCode: httpStatus.OK,
@@ -150,7 +150,7 @@ const reviewDocument = catchAsync(async (req: Request, res: Response) => {
         });
     }
 
-    const document = await DocumentService.reviewDocument(documentId, userId, req.body);
+    const document = await DocumentService.reviewDocument(documentId as string, userId as string, req.body);
 
     sendResponse(res, {
         statusCode: httpStatus.OK,
@@ -173,7 +173,7 @@ const deleteDocument = catchAsync(async (req: Request, res: Response) => {
         });
     }
 
-    const result = await DocumentService.deleteDocument(documentId, userId);
+    const result = await DocumentService.deleteDocument(documentId as string, userId as string);
 
     sendResponse(res, {
         statusCode: httpStatus.OK,

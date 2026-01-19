@@ -63,36 +63,16 @@ const getDocuments = (0, catchAsync_1.default)((req, res) => __awaiter(void 0, v
             data: null
         });
     }
-    const supplierIdValue = req.query.supplierId;
-    const supplierId = Array.isArray(supplierIdValue) ? supplierIdValue[0] : supplierIdValue;
-    const vendorIdValue = req.query.vendorId;
-    const vendorId = Array.isArray(vendorIdValue) ? vendorIdValue[0] : vendorIdValue;
-    const categoryValue = req.query.category;
-    const category = Array.isArray(categoryValue) ? categoryValue[0] : categoryValue;
-    const typeValue = req.query.type;
-    const type = Array.isArray(typeValue) ? typeValue[0] : typeValue;
-    const statusValue = req.query.status;
-    const status = Array.isArray(statusValue) ? statusValue[0] : statusValue;
-    const searchValue = req.query.search;
-    const search = Array.isArray(searchValue) ? searchValue[0] : searchValue;
-    const expiredOnlyValue = req.query.expiredOnly;
-    const expiredOnlyStr = Array.isArray(expiredOnlyValue) ? expiredOnlyValue[0] : expiredOnlyValue;
-    const expiredOnly = expiredOnlyStr === 'true';
-    const expiringSoonValue = req.query.expiringSoon;
-    const expiringSoonStr = Array.isArray(expiringSoonValue) ? expiringSoonValue[0] : expiringSoonValue;
-    const expiringSoon = expiringSoonStr === 'true';
-    const uploadedByIdValue = req.query.uploadedById;
-    const uploadedById = Array.isArray(uploadedByIdValue) ? uploadedByIdValue[0] : uploadedByIdValue;
     const filters = {
-        supplierId: supplierId,
-        vendorId: vendorId,
-        category: category,
-        type: type,
-        status: status,
-        search: search,
-        expiredOnly,
-        expiringSoon,
-        uploadedById: uploadedById
+        supplierId: req.query.supplierId,
+        vendorId: req.query.vendorId,
+        category: req.query.category,
+        type: req.query.type,
+        status: req.query.status,
+        search: req.query.search,
+        expiredOnly: req.query.expiredOnly === 'true',
+        expiringSoon: req.query.expiringSoon === 'true',
+        uploadedById: req.query.uploadedById
     };
     const result = yield document_service_1.DocumentService.getDocuments(userId, filters, req.query);
     (0, sendResponse_1.default)(res, {
@@ -193,8 +173,7 @@ const deleteDocument = (0, catchAsync_1.default)((req, res) => __awaiter(void 0,
 const getDocumentStatistics = (0, catchAsync_1.default)((req, res) => __awaiter(void 0, void 0, void 0, function* () {
     var _a;
     const userId = (_a = req.user) === null || _a === void 0 ? void 0 : _a.userId;
-    const supplierIdValue = req.query.supplierId;
-    const supplierId = Array.isArray(supplierIdValue) ? supplierIdValue[0] : supplierIdValue;
+    const { supplierId } = req.query;
     if (!userId) {
         return (0, sendResponse_1.default)(res, {
             statusCode: http_status_1.default.UNAUTHORIZED,
@@ -223,9 +202,7 @@ const getDocumentCategories = (0, catchAsync_1.default)((req, res) => __awaiter(
 const getExpiringDocuments = (0, catchAsync_1.default)((req, res) => __awaiter(void 0, void 0, void 0, function* () {
     var _a;
     const userId = (_a = req.user) === null || _a === void 0 ? void 0 : _a.userId;
-    const daysValue = req.query.days;
-    const daysStr = Array.isArray(daysValue) ? daysValue[0] : daysValue;
-    const days = parseInt(daysStr || '30', 10) || 30;
+    const days = req.query.days ? parseInt(req.query.days) : 30;
     if (!userId) {
         return (0, sendResponse_1.default)(res, {
             statusCode: http_status_1.default.UNAUTHORIZED,

@@ -18,7 +18,7 @@ const getAvailablePlans = catchAsync(async (req: Request, res: Response) => {
 
 const getPlanById = catchAsync(async (req: Request, res: Response) => {
   const { planId } = req.params;
-  const plan = await PaymentService.getPlanById(planId);
+  const plan = await PaymentService.getPlanById(planId as string);
   
   if (!plan) {
     return sendResponse(res, {
@@ -51,7 +51,7 @@ const createCheckoutSession = catchAsync(async (req: Request, res: Response) => 
 
   const { planId, billingCycle } = req.body;
   
-  const result = await PaymentService.createCheckoutSession(userId, planId, billingCycle);
+  const result = await PaymentService.createCheckoutSession(userId as string, planId as string, billingCycle);
   
   sendResponse(res, {
     statusCode: httpStatus.CREATED,
@@ -64,7 +64,7 @@ const createCheckoutSession = catchAsync(async (req: Request, res: Response) => 
 const getSessionStatus = catchAsync(async (req: Request, res: Response) => {
   const { sessionId } = req.params;
   
-  const session = await PaymentService.getSessionStatus(sessionId);
+  const session = await PaymentService.getSessionStatus(sessionId as string);
   
   sendResponse(res, {
     statusCode: httpStatus.OK,

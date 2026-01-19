@@ -65,7 +65,7 @@ const getProblemById = catchAsync(async (req: Request, res: Response) => {
     });
   }
 
-  const problem = await ProblemService.getProblemById(problemId, userId);
+  const problem = await ProblemService.getProblemById(problemId as string, userId as string);
   
   sendResponse(res, {
     statusCode: httpStatus.OK,
@@ -88,7 +88,7 @@ const updateProblem = catchAsync(async (req: Request, res: Response) => {
     });
   }
 
-  const problem = await ProblemService.updateProblem(problemId, userId, req.body);
+  const problem = await ProblemService.updateProblem(problemId as string, userId as string, req.body);
   
   sendResponse(res, {
     statusCode: httpStatus.OK,
@@ -111,7 +111,7 @@ const createMessage = catchAsync(async (req: Request, res: Response) => {
     });
   }
 
-  const message = await ProblemService.createMessage(problemId, userId, req.body);
+  const message = await ProblemService.createMessage(problemId as string, userId as string, req.body);
   
   sendResponse(res, {
     statusCode: httpStatus.CREATED,
@@ -156,7 +156,7 @@ const deleteProblem = catchAsync(async (req: Request, res: Response) => {
     });
   }
 
-  const result = await ProblemService.deleteProblem(problemId, userId);
+  const result = await ProblemService.deleteProblem(problemId as string, userId as string);
   
   sendResponse(res, {
     statusCode: httpStatus.OK,

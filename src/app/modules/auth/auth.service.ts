@@ -824,12 +824,6 @@ const userAgent = req?.headers["user-agent"] || payload.userAgent || "unknown";
           <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
             <h2 style="color: #333;">Password Reset Request</h2>
             <p>You requested to reset your password. Please use the following code to reset your password:</p>
-            <div style="background-color: #f4f4f4; padding: 20px; border-radius: 5px; text-align: center; margin: 20px 0;">
-              <div style="font-size: 32px; font-weight: bold; letter-spacing: 5px; color: #007bff; margin: 15px 0;">
-                ${otp}
-              </div>
-              <p style="margin: 0; color: #666;">This code will expire in 1 hour</p>
-            </div>
             <p>Or click the link below:</p>
             <div style="text-align: center; margin: 20px 0;">
               <a href="${config.APP.WEBSITE}/reset-password?token=${resetToken}" style="background-color: #007bff; color: white; padding: 12px 30px; text-decoration: none; border-radius: 5px; font-weight: bold;">
@@ -996,7 +990,8 @@ async getMe(userId: string): Promise<any> {
           contactNumber: true,
           industryType: true,
           companyLogo: true,
-
+          firstName: true,
+          isDeleted: true,
           suppliers: {
             where: { isDeleted: false },
             take: 5,

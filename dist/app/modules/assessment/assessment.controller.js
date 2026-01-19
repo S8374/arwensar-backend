@@ -121,11 +121,8 @@ const startAssessment = (0, catchAsync_1.default)((req, res) => __awaiter(void 0
 }));
 const saveAnswer = (0, catchAsync_1.default)((req, res) => __awaiter(void 0, void 0, void 0, function* () {
     var _a;
-    console.log("Saving answersssssssssssssssssssssssssssssssss", req.body);
     const userId = (_a = req.user) === null || _a === void 0 ? void 0 : _a.userId;
     const { submissionId, questionId } = req.params;
-    console.log("User IDsssssssssssssssss:", userId);
-    console.log("Saving answer for submission:", submissionId, "question:", questionId);
     if (!userId) {
         return (0, sendResponse_1.default)(res, {
             statusCode: http_status_1.default.UNAUTHORIZED,
@@ -164,9 +161,6 @@ const submitAssessment = (0, catchAsync_1.default)((req, res) => __awaiter(void 
 }));
 const reviewAssessment = (0, catchAsync_1.default)((req, res) => __awaiter(void 0, void 0, void 0, function* () {
     var _a;
-    console.log("review hit", req.body);
-    console.log("req user", req.user);
-    console.log("req params", req.params);
     const userId = (_a = req.user) === null || _a === void 0 ? void 0 : _a.userId;
     const { submissionId } = req.params;
     if (!userId) {
@@ -237,9 +231,7 @@ const requestEvidence = (0, catchAsync_1.default)((req, res) => __awaiter(void 0
             data: null
         });
     }
-    const reasonValue = req.body.reason;
-    const reason = Array.isArray(reasonValue) ? reasonValue[0] : reasonValue;
-    const answer = yield assessment_service_1.AssessmentService.requestEvidence(answerId, userId, reason);
+    const answer = yield assessment_service_1.AssessmentService.requestEvidence(answerId, userId, req.body.reason);
     (0, sendResponse_1.default)(res, {
         statusCode: http_status_1.default.OK,
         success: true,
@@ -249,10 +241,8 @@ const requestEvidence = (0, catchAsync_1.default)((req, res) => __awaiter(void 0
 }));
 const getDraftSubmissionById = (0, catchAsync_1.default)((req, res) => __awaiter(void 0, void 0, void 0, function* () {
     var _a;
-    console.log("Getting draft submission", req.params, req.user);
     const userId = (_a = req.user) === null || _a === void 0 ? void 0 : _a.userId;
     const { submissionId } = req.params;
-    console.log("User IDsssssssssssssssss:", userId);
     if (!userId) {
         return (0, sendResponse_1.default)(res, {
             statusCode: http_status_1.default.UNAUTHORIZED,

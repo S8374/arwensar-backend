@@ -15,7 +15,7 @@ export const ActivityLogController = {
         const limit = parseInt(req.query.limit as string) || 20;
         const action = req.query.action as string | undefined;
 
-        const result = await ActivityLogService.getUserActivity(userId, page, limit, action);
+        const result = await ActivityLogService.getUserActivity(userId as string, page, limit, action);
 
         sendResponse(res, {
             success: true,
@@ -49,7 +49,7 @@ export const ActivityLogController = {
         const action = req.query.action as string | undefined;
 
         const result = await ActivityLogService.getActivityByUserId(
-            userId,
+            userId as string,
             { id: req.user!.userId, role: req.user!.role },
             page,
             limit,

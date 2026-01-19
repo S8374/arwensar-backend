@@ -111,7 +111,7 @@ const getReportById = catchAsync(async (req: AuthRequest, res: Response) => {
     });
   }
 
-  const report = await ReportService.getReportById(reportId, userId);
+  const report = await ReportService.getReportById(reportId as string, userId as string);
 
   sendResponse(res, {
     statusCode: httpStatus.OK,
@@ -136,7 +136,7 @@ const getReportDocument = catchAsync(async (req: AuthRequest, res: Response) => 
   }
 
   // Get the report with permission check
-  const report = await ReportService.getReportById(reportId, userId);
+  const report = await ReportService.getReportById(reportId as string, userId as string);
 
   if (!report || !report.documentUrl) {
     return sendResponse(res, {
@@ -198,7 +198,7 @@ const getReportDocumentUrl = catchAsync(async (req: AuthRequest, res: Response) 
   }
 
   // Get the report with permission check
-  const report = await ReportService.getReportById(reportId, userId);
+  const report = await ReportService.getReportById(reportId as string, userId as string);
 
   if (!report || !report.documentUrl) {
     return sendResponse(res, {
@@ -236,7 +236,7 @@ const updateReport = catchAsync(async (req: AuthRequest, res: Response) => {
     });
   }
 
-  const report = await ReportService.updateReport(reportId, userId, req.body);
+  const report = await ReportService.updateReport(reportId as string, userId as string, req.body);
 
   sendResponse(res, {
     statusCode: httpStatus.OK,
@@ -260,7 +260,7 @@ const deleteReport = catchAsync(async (req: AuthRequest, res: Response) => {
     });
   }
 
-  const result = await ReportService.deleteReport(reportId, userId);
+  const result = await ReportService.deleteReport(reportId as string, userId as string);
 
   sendResponse(res, {
     statusCode: httpStatus.OK,
@@ -286,8 +286,8 @@ const sendReport = catchAsync(async (req: AuthRequest, res: Response) => {
   }
 
   const result = await ReportService.sendReport(
-    reportId,
-    userId,
+    reportId as string,
+    userId as string,
     req.body.recipientEmail
   );
 

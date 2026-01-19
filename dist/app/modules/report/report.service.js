@@ -329,19 +329,19 @@ exports.ReportService = {
                 }
             });
             // Create notification
-            yield prisma_1.prisma.notification.create({
-                data: {
-                    userId,
-                    title: "Report Generated",
-                    message: `Report "${data.title}" has been generated successfully`,
-                    type: 'REPORT_GENERATED',
-                    metadata: {
-                        reportId: report.id,
-                        reportType: report.reportType,
-                        documentUrl
-                    }
-                }
-            });
+            // await prisma.notification.create({
+            //   data: {
+            //     userId,
+            //     title: "Report Generated",
+            //     message: `Report "${data.title}" has been generated successfully`,
+            //     type: 'REPORT_GENERATED',
+            //     metadata: {
+            //       reportId: report.id,
+            //       reportType: report.reportType,
+            //       documentUrl
+            //     }
+            //   }
+            // });
             return report;
         });
     },
@@ -617,7 +617,7 @@ exports.ReportService = {
         return __awaiter(this, void 0, void 0, function* () {
             const where = {
                 vendorId: data.vendorId,
-                status: { in: ['SUBMITTED', 'UNDER_REVIEW', 'APPROVED', 'REJECTED'] }
+                status: { in: ['SUBMITTED', 'UNDER_REVIEW', 'APPROVED', 'REJECTED', 'PENDING'] }
             };
             if (data.supplierId) {
                 where.supplierId = data.supplierId;
@@ -653,7 +653,7 @@ exports.ReportService = {
                         complianceByMonth[month] = { total: 0, approved: 0, initial: 0, full: 0 };
                     }
                     complianceByMonth[month].total++;
-                    if (submission.status === 'APPROVED') {
+                    if (submission.status === 'APPROVED' || submission.status === 'PENDING') {
                         complianceByMonth[month].approved++;
                     }
                     if (submission.stage === 'INITIAL') {
@@ -686,7 +686,7 @@ exports.ReportService = {
                         };
                     }
                     supplierCompliance[supplierId].total++;
-                    if (submission.status === 'APPROVED') {
+                    if (submission.status === 'APPROVED' || submission.status === 'PENDING') {
                         supplierCompliance[supplierId].approved++;
                     }
                     supplierCompliance[supplierId].averageScore += ((_a = submission.score) === null || _a === void 0 ? void 0 : _a.toNumber()) || 0;
@@ -717,7 +717,7 @@ exports.ReportService = {
                     approvedSubmissions,
                     initialAssessments,
                     fullAssessments,
-                    pendingReviews: submissions.filter(s => s.status === 'UNDER_REVIEW').length,
+                    pendingReviews: submissions.filter(s => s.status === 'PENDING').length,
                     requiresAction: submissions.filter(s => s.status === 'REQUIRES_ACTION').length,
                     rejectedSubmissions: submissions.filter(s => s.status === 'REJECTED').length,
                     complianceRate: parseFloat(complianceRate.toFixed(2))
@@ -1724,16 +1724,7 @@ exports.ReportService = {
                 <p><strong>Generated On:</strong> ${report.createdAt.toLocaleDateString()}</p>
                 ${report.description ? `<p><strong>Description:</strong> ${report.description}</p>` : ''}
               </div>
-              
-              <p>You can download the report using the link below:</p>
-              
-              <div style="text-align: center; margin: 30px 0;">
-                <a href="${report.documentUrl}" style="background-color: #007bff; color: white; padding: 12px 30px; text-decoration: none; border-radius: 5px; font-weight: bold;">
-                  Download Report
-                </a>
-              </div>
-              
-              <p style="color: #666; font-size: 14px; margin-top: 30px;">
+                          <p style="color: #666; font-size: 14px; margin-top: 30px;">
                 This report contains confidential information. Please handle it with care and do not share with unauthorized parties.
               </p>
               

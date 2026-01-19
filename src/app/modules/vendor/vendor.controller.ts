@@ -110,7 +110,7 @@ const getSupplierById = catchAsync(async (req: Request, res: Response) => {
     });
   }
 
-  const supplier = await VendorService.getSupplierById(vendorId, supplierId);
+  const supplier = await VendorService.getSupplierById(vendorId as string, supplierId as string);
 
   sendResponse(res, {
     statusCode: httpStatus.OK,
@@ -135,7 +135,7 @@ const reviewAssessment = catchAsync(async (req: Request, res: Response) => {
 
   const result = await VendorService.reviewAssessment(
     vendorId,
-    submissionId,
+    submissionId as string,
     {
       ...req.body,
       reviewedBy: req.user?.userId
@@ -163,7 +163,7 @@ const reviewEvidence = catchAsync(async (req: Request, res: Response) => {
     });
   }
 
-  const result = await VendorService.reviewEvidence(vendorId, answerId, req.body);
+  const result = await VendorService.reviewEvidence(vendorId, answerId as string, req.body);
 
   sendResponse(res, {
     statusCode: httpStatus.OK,
@@ -214,7 +214,7 @@ const getSingleSupplierProgress = catchAsync(async (req: Request, res: Response)
     });
   }
 
-  const progress = await VendorService.getSingleSupplierProgress(supplierId, vendorId);
+  const progress = await VendorService.getSingleSupplierProgress(supplierId as string, vendorId);
 
   sendResponse(res, {
     statusCode: httpStatus.OK,
@@ -287,7 +287,7 @@ const resendInvitation = catchAsync(async (req: Request, res: Response) => {
     });
   }
 
-  const result = await VendorService.resendInvitation(supplierId, vendorId);
+  const result = await VendorService.resendInvitation(supplierId as string, vendorId);
 
   sendResponse(res, {
     statusCode: httpStatus.OK,

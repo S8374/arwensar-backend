@@ -41,7 +41,7 @@ const getAssessmentById = catchAsync(async (req: Request, res: Response) => {
     });
   }
 
-  const assessment = await AssessmentService.getAssessmentById(assessmentId, userId);
+  const assessment = await AssessmentService.getAssessmentById(assessmentId as string, userId as string);
 
   sendResponse(res, {
     statusCode: httpStatus.OK,
@@ -65,7 +65,7 @@ const getSubmissions = catchAsync(async (req: Request, res: Response) => {
     });
   }
 
-  const result = await AssessmentService.getSubmissions(userId, req.query); // ✅ Correct
+  const result = await AssessmentService.getSubmissions(userId as string, req.query); // ✅ Correct
 
   sendResponse(res, {
     statusCode: httpStatus.OK,
@@ -89,7 +89,7 @@ const getSubmissionById = catchAsync(async (req: Request, res: Response) => {
     });
   }
 
-  const submission = await AssessmentService.getSubmissionById(submissionId, userId);
+  const submission = await AssessmentService.getSubmissionById(submissionId as string,  userId as string);
 
   sendResponse(res, {
     statusCode: httpStatus.OK,
@@ -112,7 +112,7 @@ const startAssessment = catchAsync(async (req: Request, res: Response) => {
     });
   }
 
-  const submission = await AssessmentService.startAssessment(userId, assessmentId);
+  const submission = await AssessmentService.startAssessment(userId as string, assessmentId as string);
 
   sendResponse(res, {
     statusCode: httpStatus.OK,
@@ -123,11 +123,8 @@ const startAssessment = catchAsync(async (req: Request, res: Response) => {
 });
 
 const saveAnswer = catchAsync(async (req: Request, res: Response) => {
-  console.log("Saving answersssssssssssssssssssssssssssssssss", req.body);
   const userId = req.user?.userId;
   const { submissionId, questionId } = req.params;
-  console.log("User IDsssssssssssssssss:", userId);
-  console.log("Saving answer for submission:", submissionId, "question:", questionId);
   if (!userId) {
     return sendResponse(res, {
       statusCode: httpStatus.UNAUTHORIZED,
@@ -138,9 +135,9 @@ const saveAnswer = catchAsync(async (req: Request, res: Response) => {
   }
 
   const answer = await AssessmentService.saveAnswer(
-    submissionId,
-    questionId,
-    userId,
+    submissionId as string,
+    questionId as string,
+    userId as string,
     req.body
   );
 
@@ -166,8 +163,8 @@ const submitAssessment = catchAsync(async (req: Request, res: Response) => {
   }
 
   const submission = await AssessmentService.submitAssessment(
-    submissionId,
-    userId,
+    submissionId as string,
+    userId as string,
     req.body
   );
 
@@ -180,9 +177,7 @@ const submitAssessment = catchAsync(async (req: Request, res: Response) => {
 });
 
 const reviewAssessment = catchAsync(async (req: Request, res: Response) => {
-  console.log("review hit",req.body) ;
-  console.log("req user",req.user);
-  console.log("req params", req.params)
+
   const userId = req.user?.userId;
   const { submissionId } = req.params;
 
@@ -196,8 +191,8 @@ const reviewAssessment = catchAsync(async (req: Request, res: Response) => {
   }
 
   const submission = await AssessmentService.reviewAssessment(
-    submissionId,
-    userId,
+    submissionId as string,
+    userId as string,
     req.body
   );
 
@@ -223,8 +218,8 @@ const reviewEvidence = catchAsync(async (req: Request, res: Response) => {
   }
 
   const answer = await AssessmentService.reviewEvidence(
-    answerId,
-    userId,
+    answerId as string,
+    userId as string,
     req.body
   );
 
@@ -273,8 +268,8 @@ const requestEvidence = catchAsync(async (req: Request, res: Response) => {
   }
 
   const answer = await AssessmentService.requestEvidence(
-    answerId,
-    userId,
+    answerId as string,
+    userId as string,
     req.body.reason
   );
 
@@ -287,10 +282,8 @@ const requestEvidence = catchAsync(async (req: Request, res: Response) => {
 });
 
 const getDraftSubmissionById = catchAsync(async (req: Request, res: Response) => {
-  console.log("Getting draft submission", req.params, req.user);
   const userId = req.user?.userId;
   const { submissionId } = req.params;
-  console.log("User IDsssssssssssssssss:", userId);
   if (!userId) {
     return sendResponse(res, {
       statusCode: httpStatus.UNAUTHORIZED,
@@ -300,7 +293,7 @@ const getDraftSubmissionById = catchAsync(async (req: Request, res: Response) =>
     });
   }
 
-  const submission = await AssessmentService.getDraftSubmissionById(submissionId, userId);
+  const submission = await AssessmentService.getDraftSubmissionById(submissionId as string, userId as string);
 
   sendResponse(res, {
     statusCode: httpStatus.OK,
@@ -324,8 +317,8 @@ const removeEvidence = catchAsync(async (req: Request, res: Response) => {
   }
 
   const answer = await AssessmentService.removeEvidence(
-    answerId,
-    userId,
+    answerId as string,
+    userId as string,
   );
 
   sendResponse(res, {
@@ -340,7 +333,7 @@ const getSubmissionsByUserId = catchAsync(async (req: Request, res: Response) =>
     const { userId } = req.params; // Fixed extra dot
     const options = req.query; // For pagination, filters
 
-    const result = await AssessmentService.getSubmissionsByUserId(userId, options);
+    const result = await AssessmentService.getSubmissionsByUserId(userId as string, options );
 
     res.status(httpStatus.OK).json({
       success: true,

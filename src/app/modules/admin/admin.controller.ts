@@ -20,11 +20,10 @@ const getDashboardStats = catchAsync(async (req: Request, res: Response) => {
 });
 
 const createPlan = catchAsync(async (req: Request, res: Response) => {
-   console.log("Plan craete" ,req.body);
 
   const plan = await AdminService.createPlan({
     ...req.body,
-    createdBy: req.user?.userId
+    createdBy: req.user?.userId as string
   });
   sendResponse(res, {
     statusCode: httpStatus.CREATED,
@@ -35,7 +34,7 @@ const createPlan = catchAsync(async (req: Request, res: Response) => {
 });
 
 const updatePlan = catchAsync(async (req: Request, res: Response) => {
-  const { planId } = req.params;
+  const { planId } = req.params ;
   
   // Extract data - check for data property first, then body, then direct
   const data = req.body.data || req.body.body || req.body;
@@ -44,7 +43,7 @@ const updatePlan = catchAsync(async (req: Request, res: Response) => {
     throw new ApiError(httpStatus.BAD_REQUEST, "No data provided for update");
   }
   
-  const plan = await AdminService.updatePlan(planId, data);
+  const plan = await AdminService.updatePlan(planId as string, data);
   
   sendResponse(res, {
     statusCode: httpStatus.OK,
@@ -56,7 +55,7 @@ const updatePlan = catchAsync(async (req: Request, res: Response) => {
 
 const deletePlan = catchAsync(async (req: Request, res: Response) => {
   const { planId } = req.params;
-  const plan = await AdminService.deletePlan(planId);
+  const plan = await AdminService.deletePlan(planId as string);
 
   sendResponse(res, {
     statusCode: httpStatus.OK,
@@ -79,7 +78,7 @@ const getAllPlans = catchAsync(async (req: Request, res: Response) => {
 
 const getPlanById = catchAsync(async (req: Request, res: Response) => {
   const { planId } = req.params;
-  const plan = await AdminService.getPlanById(planId);
+  const plan = await AdminService.getPlanById(planId as string);
 
   sendResponse(res, {
     statusCode: httpStatus.OK,
@@ -152,7 +151,7 @@ const getAllSuppliers = catchAsync(async (req: Request, res: Response) => {
 const deleteSupplier = catchAsync(async (req: Request, res: Response) => {
   const { id } = req.params;
 
-  const deletedSupplier = await AdminService.deleteSupplierPermanently(id);
+  const deletedSupplier = await AdminService.deleteSupplierPermanently(id as string);
 
   sendResponse(res, {
     statusCode: httpStatus.OK,
@@ -166,7 +165,7 @@ const generateReport = catchAsync(async (req: Request, res: Response) => {
   const { type } = req.params;
   const { filters } = req.body;
 
-  const report = await AdminService.generateSystemReport(type, filters);
+  const report = await AdminService.generateSystemReport(type as string, filters);
 
   sendResponse(res, {
     statusCode: httpStatus.OK,
@@ -179,7 +178,7 @@ const generateReport = catchAsync(async (req: Request, res: Response) => {
 const updateUsers = catchAsync(async (req: Request, res: Response) => {
   const { userId } = req.params;
   const data = req.body;
-  const updatedUser = await AdminService.updateUser(userId, data);
+  const updatedUser = await AdminService.updateUser(userId as string, data);
 
   sendResponse(res, {
     statusCode: httpStatus.OK,
@@ -191,7 +190,7 @@ const updateUsers = catchAsync(async (req: Request, res: Response) => {
 const deleteUser = catchAsync(async (req: Request, res: Response) => {
   const { userId } = req.params;
 
-  const result = await AdminService.deleteUser(userId);
+  const result = await AdminService.deleteUser(userId as string);
 
   sendResponse(res, {
     statusCode: httpStatus.OK,
@@ -203,7 +202,7 @@ const deleteUser = catchAsync(async (req: Request, res: Response) => {
 const toggleUserBlock = catchAsync(async (req: Request, res: Response) => {
   const { userId } = req.params;
   const { block, reason } = req.body as { block: boolean; reason?: string };
-  const updatedUser = await AdminService.toggleUserBlock(userId, block, reason);
+  const updatedUser = await AdminService.toggleUserBlock(userId as string, block, reason);
   console.log("userId",userId)
   sendResponse(res, {
     statusCode: httpStatus.OK,
@@ -213,7 +212,7 @@ const toggleUserBlock = catchAsync(async (req: Request, res: Response) => {
   });
 });
 const bulkDeleteUsers = catchAsync(async (req: Request, res: Response) => {
-  const { userIds } = req.body as { userIds: string[] };
+  const { userIds } = req.body;
 
   if (!userIds || userIds.length === 0) {
     return res.status(httpStatus.BAD_REQUEST).json({
@@ -233,7 +232,7 @@ const bulkDeleteUsers = catchAsync(async (req: Request, res: Response) => {
   });
 });
 const bulkUpdateUsers = catchAsync(async (req: Request, res: Response) => {
-  const { userIds, data } = req.body as { userIds: string[]; data: Partial<any> };
+  const { userIds, data } = req.body ;
   const result = await AdminService.bulkUpdateUsers(userIds, data);
   sendResponse(res, {
     statusCode: httpStatus.OK,
@@ -243,7 +242,7 @@ const bulkUpdateUsers = catchAsync(async (req: Request, res: Response) => {
   });
 });
 const bulkBlockUsers = catchAsync(async (req: Request, res: Response) => {
-  const { userIds, block, reason } = req.body as { userIds: string[]; block: boolean; reason?: string };
+  const { userIds, block, reason } = req.body ;
   const result = await AdminService.bulkBlockUsers(userIds, block, reason);
   sendResponse(res, {
     statusCode: httpStatus.OK,
@@ -253,7 +252,7 @@ const bulkBlockUsers = catchAsync(async (req: Request, res: Response) => {
   });
 });
 const bulkVerifyUsers = catchAsync(async (req: Request, res: Response) => {
-  const { userIds } = req.body as { userIds: string[] };
+  const { userIds } = req.body ;
   const result = await AdminService.bulkVerifyUsers(userIds);
   sendResponse(res, {
     statusCode: httpStatus.OK,
@@ -283,7 +282,7 @@ const exportUsersToCSV = catchAsync(async (req: Request, res: Response) => {
 // Permanently delete a user
 const permanentDeleteUser = catchAsync(async (req: Request, res: Response) => {
   const { userId } = req.params;
-  const result = await AdminService.permanentDeleteUser(userId);
+  const result = await AdminService.permanentDeleteUser(userId as string);
 
   sendResponse(res, {
     statusCode: httpStatus.OK,
@@ -294,7 +293,7 @@ const permanentDeleteUser = catchAsync(async (req: Request, res: Response) => {
 });
 const updateAssessment = catchAsync(async (req: Request, res: Response) => {
   const { assessmentId } = req.params;
-  const assessment = await AdminService.updateAssessment(assessmentId, {
+  const assessment = await AdminService.updateAssessment(assessmentId as string, {
     ...req.body,
     updatedBy: req.user?.userId
   });
@@ -309,7 +308,7 @@ const updateAssessment = catchAsync(async (req: Request, res: Response) => {
 
 const deleteAssessment = catchAsync(async (req: Request, res: Response) => {
   const { assessmentId } = req.params;
-  const result = await AdminService.deleteAssessment(assessmentId);
+  const result = await AdminService.deleteAssessment(assessmentId as string);
 
   sendResponse(res, {
     statusCode: httpStatus.OK,
@@ -320,7 +319,7 @@ const deleteAssessment = catchAsync(async (req: Request, res: Response) => {
 });
 const getAssessmentById = catchAsync(async (req: Request, res: Response) => {
   const { assessmentId } = req.params;
-  const assessment = await AdminService.getAssessmentById(assessmentId);
+  const assessment = await AdminService.getAssessmentById(assessmentId as string);
 
   if (!assessment) {
     throw new ApiError(httpStatus.NOT_FOUND, "Assessment not found");
@@ -363,7 +362,7 @@ const getAllUsers = catchAsync(async (req: Request, res: Response) => {
 const getUserById = catchAsync(async (req, res) => {
   const { userId } = req.params;
 
-  const result = await AdminService.getUserById(userId);
+  const result = await AdminService.getUserById(userId as string);
 
   sendResponse(res, {
     statusCode: httpStatus.OK,
