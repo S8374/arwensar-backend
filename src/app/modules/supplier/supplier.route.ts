@@ -26,29 +26,7 @@ router.patch(
 );
 
 // Assessments
-router.get(
-  "/assessments",
-  auth("SUPPLIER"),
-  SupplierController.getAssessments
-);
 
-router.post(
-  "/assessments/:assessmentId/start",
-  auth("SUPPLIER"),
-  SupplierController.startAssessment
-);
-
-router.post(
-  "/submissions/:submissionId/answers/:questionId",
-  auth("SUPPLIER"),
-  SupplierController.saveAnswer
-);
-
-router.post(
-  "/submissions/:submissionId/submit",
-  auth("SUPPLIER"),
-  SupplierController.submitAssessment
-);
 router.get(
   "/verify-invitation/:token",
   SupplierController.verifyInvitation

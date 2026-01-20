@@ -7,7 +7,6 @@ import bcrypt from "bcryptjs";
 import { mailtrapService } from "../../shared/mailtrap.service";
 import ApiError from "../../../error/ApiError";
 import { config } from "../../../config";
-import { calculateBIVScore } from "../../../logic/bivRiskCalculator";
 
 
 

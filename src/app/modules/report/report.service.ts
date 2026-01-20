@@ -8,6 +8,7 @@ import { generatePDF } from "../../../utils/pdfGenerator";
 import fs from "fs";
 import path from "path";
 import { NotificationService } from "../notification/notification.service";
+import { generateSupplierRecommendations } from "../../../logic/vendor.logic";
 
 export interface ReportFilters {
   vendorId?: string;
@@ -1039,7 +1040,7 @@ export const ReportService = {
         averageResponseTime: supplier.averageResponseTime,
         outstandingPayments: supplier.outstandingPayments?.toNumber()
       },
-      recommendations: this.generateSupplierRecommendations(supplier, averageScores, evidenceCompletionRate)
+      recommendations: generateSupplierRecommendations(supplier, averageScores, evidenceCompletionRate)
     };
   },
 
@@ -1562,102 +1563,7 @@ export const ReportService = {
     };
   },
 
-  // ========== GENERATE SUPPLIER RECOMMENDATIONS ==========
-  generateSupplierRecommendations(supplier: any, categoryScores: any[], evidenceCompletionRate: number): string[] {
-    const recommendations: string[] = [];
 
-    // Check overall scores
-    if (supplier.bivScore && supplier.bivScore < 40) {
-      recommendations.push("Supplier is at high risk. Consider implementing immediate remediation actions and schedule a review meeting.");
-    }
-
-    if (supplier.businessScore && supplier.businessScore < 50) {
-      recommendations.push("Business continuity planning needs improvement. Review disaster recovery procedures and conduct a business impact analysis.");
-    }
-
-    if (supplier.integrityScore && supplier.integrityScore < 50) {
-      recommendations.push("Data integrity controls require strengthening. Implement additional verification measures and access controls.");
-    }
-
-    if (supplier.availabilityScore && supplier.availabilityScore < 50) {
-      recommendations.push("Service availability needs enhancement. Review redundancy, backup systems, and consider implementing SLAs for uptime.");
-    }
-
-    // Check evidence completion
-    if (evidenceCompletionRate < 80) {
-      recommendations.push(`Evidence completion rate is low (${evidenceCompletionRate.toFixed(2)}%). Request missing evidence from supplier.`);
-    }
-
-    // Check NIS2 compliance
-    if (!supplier.nis2Compliant) {
-      recommendations.push("Supplier is not NIS2 compliant. Require NIS2 compliance assessment and implementation plan.");
-    }
-
-    // Check contract expiry
-    if (supplier.contractEndDate) {
-      const daysRemaining = Math.ceil(
-        (new Date(supplier.contractEndDate).getTime() - new Date().getTime()) /
-        (1000 * 60 * 60 * 24)
-      );
-
-      if (daysRemaining < 30) {
-        recommendations.push(`Contract expires in ${daysRemaining} days. Initiate renewal process immediately.`);
-      } else if (daysRemaining < 90) {
-        recommendations.push(`Contract expires in ${daysRemaining} days. Start renewal discussions.`);
-      }
-    }
-
-    // Check assessment frequency
-    if (supplier.lastAssessmentDate) {
-      const daysSinceLastAssessment = Math.ceil(
-        (new Date().getTime() - new Date(supplier.lastAssessmentDate).getTime()) /
-        (1000 * 60 * 60 * 24)
-      );
-
-      if (daysSinceLastAssessment > 365) {
-        recommendations.push("Annual assessment overdue. Schedule new comprehensive risk assessment.");
-      } else if (daysSinceLastAssessment > 180) {
-        recommendations.push("Last assessment was more than 6 months ago. Consider interim review.");
-      }
-    }
-
-    // Check outstanding payments
-    if (supplier.outstandingPayments && supplier.outstandingPayments > 0) {
-      recommendations.push(`Supplier has outstanding payments (${supplier.outstandingPayments.toFixed(2)}). Review payment terms and follow up.`);
-    }
-
-    // Check delivery performance
-    if (supplier.onTimeDeliveryRate && supplier.onTimeDeliveryRate < 90) {
-      recommendations.push(`On-time delivery rate is low (${supplier.onTimeDeliveryRate.toFixed(2)}%). Review logistics and delivery processes.`);
-    }
-
-    // Check response time
-    if (supplier.averageResponseTime && supplier.averageResponseTime > 48) {
-      recommendations.push(`Average response time is high (${supplier.averageResponseTime} hours). Implement communication protocol improvements.`);
-    }
-
-    // Add category-specific recommendations
-    categoryScores.forEach(category => {
-      if (category.percentage < 70) {
-        recommendations.push(
-          `${category.category} compliance needs improvement (${category.percentage.toFixed(2)}%). ` +
-          "Review related controls, provide training, and conduct follow-up assessment."
-        );
-      }
-    });
-
-    // Add positive recommendations for good performance
-    if (supplier.bivScore && supplier.bivScore > 80) {
-      recommendations.push("Supplier demonstrates excellent overall performance. Consider long-term partnership and potential strategic collaboration.");
-    }
-
-    if (evidenceCompletionRate > 95) {
-      recommendations.push("Excellent evidence management. Supplier shows strong compliance documentation practices.");
-    }
-
-    // Limit to top recommendations
-    return recommendations.slice(0, 8);
-  },
 
   // ========== GET VENDOR REPORT OPTIONS ==========
   async getVendorReportOptions(vendorId: string) {

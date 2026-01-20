@@ -876,9 +876,6 @@ export const DocumentService = {
         };
     },
 
-
-
-
     async getDocumentCategories(): Promise<string[]> {
         const categories = await prisma.document.findMany({
             select: {

@@ -4,21 +4,18 @@ import { prisma } from "../../shared/prisma";
 import ApiError from "../../../error/ApiError";
 import httpStatus from "http-status";
 import { getPlanFeatures } from "../../helper/getFeatures";
-import { PlanFeatures } from "../../helper/planFeatures";
-
-// src/app/modules/usage/usage.service.ts - Updated interfaces
 export interface UsageCheckResult {
   canProceed: boolean;
-  remaining?: number | null; // Allow null for unlimited
-  limit?: number | null;     // Allow null for unlimited
+  remaining?: number | null; 
+  limit?: number | null;    
   message?: string;
 }
 
 export interface BulkLimitCheckResult {
   canProceed: boolean;
   message?: string;
-  limit?: number | null;     // Allow null for unlimited
-  remaining?: number | null; // Allow null for unlimited
+  limit?: number | null;     
+  remaining?: number | null; 
 }
 class UsageService {
   // ========== GET CURRENT USAGE ==========
@@ -136,7 +133,6 @@ class UsageService {
 
   // ========== VALIDATE SUBSCRIPTION STATUS ==========
   private async validateSubscription(userId: string) {
-    console.log("Hiting User Id" , userId);
     const subscription = await prisma.subscription.findUnique({
       where: { userId },
       include: { plan: true }
@@ -328,7 +324,6 @@ class UsageService {
     }
 
     const usage = subscription.PlanLimitData || await this.getCurrentUsage(subscription.id);
-    const features = getPlanFeatures(subscription.plan);
 
     // Get all usage values
     const limits = {
@@ -340,18 +335,6 @@ class UsageService {
       reportsGeneratedUsed: usage.reportsGeneratedUsed,
       notificationsSend: usage.notificationsSend,
     };
-
-    // Also include the plan features for reference
-    const planFeatures = {
-      supplierLimit: features.supplierLimit,
-      assessmentLimit: features.assessmentLimit,
-      messagesPerMonth: features.messagesPerMonth,
-      documentReviewsPerMonth: features.documentReviewsPerMonth,
-      reportCreate: features.reportCreate,
-      reportsGeneratedPerMonth: features.reportsGeneratedPerMonth,
-      notificationsSend: features.notificationsSend,
-    };
-
     return {
       limits,
       subscription: {

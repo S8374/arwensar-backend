@@ -4,7 +4,7 @@ import { prisma } from "../../shared/prisma";
 import httpStatus from "http-status";
 import { NotificationService } from "../notification/notification.service";
 import ApiError from "../../../error/ApiError";
-import { calculateBIVScore } from "../../../logic/bivRiskCalculator";
+import {  calculateBIVScores } from "../../../logic/bivRiskCalculator";
 import { mailtrapService } from "../../shared/mailtrap.service";
 
 export interface AssessmentProgress {
@@ -363,7 +363,7 @@ export const AssessmentService = {
     );
 
     // Calculate BIV scores
-    const bivScores = this.calculateBIVScores(submission.answers);
+    const bivScores = calculateBIVScores(submission.answers);
 
     return {
       ...submission,
@@ -377,83 +377,6 @@ export const AssessmentService = {
         evidencePending: pendingEvidence.length
       },
       bivScores
-    };
-  },
-
-  // ========== CALCULATE BIV SCORES ==========
-  calculateBIVScores(answers: any[]): any {
-    if (!answers || answers.length === 0) {
-      return {
-        businessScore: 0,
-        integrityScore: 0,
-        availabilityScore: 0,
-        bivScore: 0,
-        riskLevel: 'HIGH',
-        breakdown: { business: 0, integrity: 0, availability: 0 }
-      };
-    }
-
-    console.log("Raw answers received:", answers);
-
-    // Filter answers by category (case-insensitive, safe access)
-    const businessAnswers = answers.filter(
-      (a: any) => (a.question?.bivCategory || '').toUpperCase() === 'BUSINESS'
-    );
-    const integrityAnswers = answers.filter(
-      (a: any) => (a.question?.bivCategory || '').toUpperCase() === 'INTEGRITY'
-    );
-    const availabilityAnswers = answers.filter(
-      (a: any) => (a.question?.bivCategory || '').toUpperCase() === 'AVAILABILITY'
-    );
-
-    console.log("Business answers:", businessAnswers.length);
-    console.log("Integrity answers:", integrityAnswers.length);
-    console.log("Availability answers:", availabilityAnswers.length);
-
-    const calculateCategoryScore = (categoryAnswers: any[]) => {
-      if (categoryAnswers.length === 0) return 0;
-
-      let totalScore = 0;
-      let totalMaxScore = 0;
-
-      categoryAnswers.forEach((ans: any) => {
-        // Handle score (string, number, or Decimal)
-        const score = ans.score;
-        const numScore =
-          typeof score === 'string' ? parseFloat(score) :
-            score?.toNumber ? score.toNumber() :
-              Number(score) || 0;
-
-        // Handle maxScore — it's on the answer, not question!
-        const maxScore = ans.maxScore || ans.question?.maxScore || 10;
-
-        totalScore += numScore;
-        totalMaxScore += maxScore;
-      });
-
-      return totalMaxScore > 0
-        ? parseFloat(((totalScore / totalMaxScore) * 100).toFixed(2))
-        : 0;
-    };
-
-    const businessScore = calculateCategoryScore(businessAnswers);
-    const integrityScore = calculateCategoryScore(integrityAnswers);
-    const availabilityScore = calculateCategoryScore(availabilityAnswers);
-
-    // Use your existing BIV calculator
-    const bivResult = calculateBIVScore({
-      businessScore,
-      integrityScore,
-      availabilityScore
-    });
-
-    return {
-      businessScore,
-      integrityScore,
-      availabilityScore,
-      bivScore: bivResult.bivScore,
-      riskLevel: bivResult.riskLevel,
-      breakdown: bivResult.breakdown
     };
   },
 
@@ -763,7 +686,7 @@ export const AssessmentService = {
     }
 
     // Recalculate BIV scores
-    const bivScores = this.calculateBIVScores(submission.answers);
+    const bivScores = calculateBIVScores(submission.answers);
 
     // === CALCULATE OVERALL SCORE ===
     let totalScore = 0;
@@ -852,7 +775,7 @@ export const AssessmentService = {
             },
           });
 
-         
+
         }
       }
 
@@ -860,17 +783,6 @@ export const AssessmentService = {
     });
 
     return result;
-  },
-
-
-  // ========== CALCULATE RISK SCORE ==========
-  calculateRiskScore(riskLevel: Criticality): number {
-    switch (riskLevel) {
-      case 'LOW': return 1;
-      case 'MEDIUM': return 2;
-      case 'HIGH': return 3;
-      default: return 2;
-    }
   },
 
   // ========== UPDATE ASSESSMENT COMPLETION STATUS ==========
@@ -1570,59 +1482,57 @@ export const AssessmentService = {
     };
   }
   ,
-async removeEvidence(
-  questionId: string,
-  userId: string
-): Promise<Prisma.BatchPayload> {
+  async removeEvidence(
+    questionId: string,
+    userId: string
+  ): Promise<Prisma.BatchPayload> {
 
-  const answer = await prisma.assessmentAnswer.findFirst({
-    where: { questionId },
-    include: {
-      submission: {
-        include: {
-          user: { select: { id: true } }
+    const answer = await prisma.assessmentAnswer.findFirst({
+      where: { questionId },
+      include: {
+        submission: {
+          include: {
+            user: { select: { id: true } }
+          }
         }
       }
+    });
+
+    if (!answer) {
+      throw new ApiError(httpStatus.NOT_FOUND, "Answer not found");
     }
-  });
 
-  if (!answer) {
-    throw new ApiError(httpStatus.NOT_FOUND, "Answer not found");
-  }
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { role: true, vendorId: true }
+    });
 
-  const user = await prisma.user.findUnique({
-    where: { id: userId },
-    select: { role: true, vendorId: true }
-  });
-
-  if (!user) {
-    throw new ApiError(httpStatus.NOT_FOUND, "User not found");
-  }
-
-  const canRemove =
-    answer.submission.user.id === userId ||
-    (user.role === 'VENDOR' &&
-      answer.submission.vendorId === user.vendorId) ||
-    user.role === 'ADMIN';
-
-  if (!canRemove) {
-    throw new ApiError(
-      httpStatus.FORBIDDEN,
-      "You don't have permission to remove this evidence"
-    );
-  }
-
-  // ✅ CORRECT update
-  return prisma.assessmentAnswer.updateMany({
-    where: { questionId },   // ✅ FIXED
-    data: {
-      evidence: null,
-      evidenceStatus: 'PENDING'
+    if (!user) {
+      throw new ApiError(httpStatus.NOT_FOUND, "User not found");
     }
-  });
-}
 
-  ,
+    const canRemove =
+      answer.submission.user.id === userId ||
+      (user.role === 'VENDOR' &&
+        answer.submission.vendorId === user.vendorId) ||
+      user.role === 'ADMIN';
+
+    if (!canRemove) {
+      throw new ApiError(
+        httpStatus.FORBIDDEN,
+        "You don't have permission to remove this evidence"
+      );
+    }
+
+    // ✅ CORRECT update
+    return prisma.assessmentAnswer.updateMany({
+      where: { questionId },   // ✅ FIXED
+      data: {
+        evidence: null,
+        evidenceStatus: 'PENDING'
+      }
+    });
+  },
   // ========== GET SUBMISSIONS BY USER ID ==========
   async getSubmissionsByUserId(
     userId: string,
@@ -1714,6 +1624,4 @@ async removeEvidence(
       }
     };
   }
-
-
 };

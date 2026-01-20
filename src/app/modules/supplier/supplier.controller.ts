@@ -73,89 +73,92 @@ const updateSupplierProfile = catchAsync(async (req: Request, res: Response) => 
   });
 });
 
-const getAssessments = catchAsync(async (req: Request, res: Response) => {
-  const supplierId = req.user?.supplierId;
+// const getAssessments = catchAsync(async (req: Request, res: Response) => {
+//   const supplierId = req.user?.supplierId;
 
-  if (!supplierId) {
-    return sendResponse(res, {
-      statusCode: httpStatus.UNAUTHORIZED,
-      success: false,
-      message: "Supplier ID not found",
-      data: null
-    });
-  }
+//   if (!supplierId) {
+//     return sendResponse(res, {
+//       statusCode: httpStatus.UNAUTHORIZED,
+//       success: false,
+//       message: "Supplier ID not found",
+//       data: null
+//     });
+//   }
 
-  const assessments = await SupplierService.getAssessments(supplierId);
+//   const assessments = await SupplierService.getAssessments(supplierId);
 
-  sendResponse(res, {
-    statusCode: httpStatus.OK,
-    success: true,
-    message: "Assessments retrieved successfully",
-    data: assessments
-  });
-});
+//   sendResponse(res, {
+//     statusCode: httpStatus.OK,
+//     success: true,
+//     message: "Assessments retrieved successfully",
+//     data: assessments
+//   });
+// });
 
-const startAssessment = catchAsync(async (req: Request, res: Response) => {
-  console.log("Starting assessment", req.params, req.user);
-  const supplierId = req.user?.userId;
-  const { assessmentId } = req.params;
-  console.log("Assessment ID:", assessmentId, "Supplier ID:", supplierId);
-  if (!supplierId) {
-    return sendResponse(res, {
-      statusCode: httpStatus.UNAUTHORIZED,
-      success: false,
-      message: "Supplier ID not found",
-      data: null
-    });
-  }
+// const startAssessment = catchAsync(async (req: Request, res: Response) => {
+//   console.log("Starting assessment", req.params, req.user);
+//   const supplierId = req.user?.userId;
+//   const { assessmentId } = req.params;
+//   console.log("Assessment ID:", assessmentId, "Supplier ID:", supplierId);
+//   if (!supplierId) {
+//     return sendResponse(res, {
+//       statusCode: httpStatus.UNAUTHORIZED,
+//       success: false,
+//       message: "Supplier ID not found",
+//       data: null
+//     });
+//   }
 
-  const result = await SupplierService.startAssessment(
-    assessmentId as string,
-    supplierId as string,
-    req.user?.userId || ""
-  );
+//   const result = await SupplierService.startAssessment(
+//     assessmentId as string,
+//     supplierId as string,
+//     req.user?.userId || ""
+//   );
 
-  sendResponse(res, {
-    statusCode: httpStatus.OK,
-    success: true,
-    message: "Assessment started successfully",
-    data: result
-  });
-});
+//   sendResponse(res, {
+//     statusCode: httpStatus.OK,
+//     success: true,
+//     message: "Assessment started successfully",
+//     data: result
+//   });
+// });
 
-const saveAnswer = catchAsync(async (req: Request, res: Response) => {
-  const { submissionId, questionId } = req.params;
+// const saveAnswer = catchAsync(async (req: Request, res: Response) => {
+//   const { submissionId, questionId } = req.params;
 
-  const result = await SupplierService.saveAnswer(
-    submissionId as string,
-    questionId as string,
-    req.body,
-    req.user?.userId || ""
-  );
+//   const result = await SupplierService.saveAnswer(
+//     submissionId as string,
+//     questionId as string,
+//     req.body,
+//     req.user?.userId || ""
+//   );
 
-  sendResponse(res, {
-    statusCode: httpStatus.OK,
-    success: true,
-    message: "Answer saved successfully",
-    data: result
-  });
-});
+//   sendResponse(res, {
+//     statusCode: httpStatus.OK,
+//     success: true,
+//     message: "Answer saved successfully",
+//     data: result
+//   });
+// });
 
-const submitAssessment = catchAsync(async (req: Request, res: Response) => {
-  const { submissionId } = req.params;
+// const submitAssessment = catchAsync(async (req: Request, res: Response) => {
+//   const { submissionId } = req.params;
 
-  const result = await SupplierService.submitAssessment(
-    submissionId as string,
-    req.user?.userId || ""
-  );
+//   const result = await SupplierService.submitAssessment(
+//     submissionId as string,
+//     req.user?.userId || ""
+//   );
 
-  sendResponse(res, {
-    statusCode: httpStatus.OK,
-    success: true,
-    message: "Assessment submitted successfully",
-    data: result
-  });
-});
+//   sendResponse(res, {
+//     statusCode: httpStatus.OK,
+//     success: true,
+//     message: "Assessment submitted successfully",
+//     data: result
+//   });
+// });
+
+
+
 const verifyInvitation = catchAsync(async (req: Request, res: Response) => {
   const { token } = req.params;
 
@@ -210,10 +213,6 @@ export const SupplierController = {
   getDashboardStats,
   getSupplierProfile,
   updateSupplierProfile,
-  getAssessments,
-  startAssessment,
-  saveAnswer,
-  submitAssessment,
   verifyInvitation,
   completeSupplierRegistration,
   getSupplierContractStatus

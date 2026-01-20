@@ -21,7 +21,6 @@ export interface LoginResponse {
   refreshToken: string;
 }
 
-
 export interface RegisterResponse {
   user: User;
   vendor: Vendor;
@@ -237,8 +236,6 @@ export const AuthService = {
 
 
 // ========== LOGIN ==========
-
-
 async login(payload: any, req?: any): Promise<LoginResponse> {
   const { email, password } = payload;
 

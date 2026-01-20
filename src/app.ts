@@ -14,10 +14,9 @@ app.use(
   cors({
     origin: [
       "http://localhost:5173",
-      "https://periodontal-garrett-dintless.ngrok-free.dev/",
-      "https://arwensar-frontend.vercel.app",
       "https://dev.cybernark.com",
-      "https://cybernark.com"
+      "https://cybernark.com",
+      "https://www.cybernark.com"
     ],
     credentials: true,
   })

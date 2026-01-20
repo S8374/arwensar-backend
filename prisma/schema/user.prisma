@@ -16,7 +16,7 @@ model User {
 
   vendorId   String? @unique
   supplierId String? @unique
-
+  allFeaturesAccess Boolean @default(false) @map("all_features_access")
   // RELATIONSHIPS
   notificationPreferences NotificationPreferences?
   subscription            Subscription?

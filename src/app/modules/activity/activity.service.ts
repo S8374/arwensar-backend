@@ -6,7 +6,7 @@ import httpStatus from "http-status";
 export const ActivityLogService = {
 
     async getUserActivity(
-userId: string, page = 1, limit = 20, p0?: string,
+        userId: string, page = 1, limit = 20, p0?: string,
     ) {
         const skip = (page - 1) * limit;
 

@@ -1,5 +1,7 @@
 // src/Logic/bivRiskCalculator.ts
 
+import { Criticality } from "@prisma/client";
+
 export interface BIVScoreInput {
   businessScore: number;
   integrityScore: number;
@@ -18,8 +20,6 @@ export interface BIVScoreResult {
 
 export const calculateBIVScore = (input: BIVScoreInput): BIVScoreResult => {
   const { businessScore, integrityScore, availabilityScore } = input;
-  
-  // Apply weights: Business(40%), Integrity(30%), Availability(30%)
   const weightedBusiness = businessScore * 0.4;
   const weightedIntegrity = integrityScore * 0.3;
   const weightedAvailability = availabilityScore * 0.3;
@@ -47,8 +47,94 @@ export const calculateBIVScore = (input: BIVScoreInput): BIVScoreResult => {
   };
 };
 
+  // ========== CALCULATE BIV SCORES ==========
+ export const calculateBIVScores=(answers: any[]): any => {
+    if (!answers || answers.length === 0) {
+      return {
+        businessScore: 0,
+        integrityScore: 0,
+        availabilityScore: 0,
+        bivScore: 0,
+        riskLevel: 'HIGH',
+        breakdown: { business: 0, integrity: 0, availability: 0 }
+      };
+    }
+
+    console.log("Raw answers received:", answers);
+
+    // Filter answers by category (case-insensitive, safe access)
+    const businessAnswers = answers.filter(
+      (a: any) => (a.question?.bivCategory || '').toUpperCase() === 'BUSINESS'
+    );
+    const integrityAnswers = answers.filter(
+      (a: any) => (a.question?.bivCategory || '').toUpperCase() === 'INTEGRITY'
+    );
+    const availabilityAnswers = answers.filter(
+      (a: any) => (a.question?.bivCategory || '').toUpperCase() === 'AVAILABILITY'
+    );
+
+    console.log("Business answers:", businessAnswers.length);
+    console.log("Integrity answers:", integrityAnswers.length);
+    console.log("Availability answers:", availabilityAnswers.length);
+
+    const calculateCategoryScore = (categoryAnswers: any[]) => {
+      if (categoryAnswers.length === 0) return 0;
+
+      let totalScore = 0;
+      let totalMaxScore = 0;
+
+      categoryAnswers.forEach((ans: any) => {
+        // Handle score (string, number, or Decimal)
+        const score = ans.score;
+        const numScore =
+          typeof score === 'string' ? parseFloat(score) :
+            score?.toNumber ? score.toNumber() :
+              Number(score) || 0;
+
+        // Handle maxScore — it's on the answer, not question!
+        const maxScore = ans.maxScore || ans.question?.maxScore || 10;
+
+        totalScore += numScore;
+        totalMaxScore += maxScore;
+      });
+
+      return totalMaxScore > 0
+        ? parseFloat(((totalScore / totalMaxScore) * 100).toFixed(2))
+        : 0;
+    };
+
+    const businessScore = calculateCategoryScore(businessAnswers);
+    const integrityScore = calculateCategoryScore(integrityAnswers);
+    const availabilityScore = calculateCategoryScore(availabilityAnswers);
+
+    // Use your existing BIV calculator
+    const bivResult = calculateBIVScore({
+      businessScore,
+      integrityScore,
+      availabilityScore
+    });
+
+    return {
+      businessScore,
+      integrityScore,
+      availabilityScore,
+      bivScore: bivResult.bivScore,
+      riskLevel: bivResult.riskLevel,
+      breakdown: bivResult.breakdown
+    };
+  };
+
 export const getRiskLevel = (score: number): 'LOW' | 'MEDIUM' | 'HIGH' => {
   if (score >= 71) return 'LOW';
   if (score >= 41) return 'MEDIUM';
   return 'HIGH';
 };
+
+export const calculateRiskScore = (riskLevel: Criticality): number => {
+    switch (riskLevel) {
+      case 'LOW': return 1;
+      case 'MEDIUM': return 2;
+      case 'HIGH': return 3;
+      default: return 2;
+    }
+  };
