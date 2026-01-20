@@ -487,7 +487,7 @@ export const VendorService = {
   // ========== CALCULATE ASSESSMENT STATS ==========
   calculateAssessmentStats(assessments: any[], suppliers: any[]) {
     const pendingAssessments = assessments.filter(a =>
-      a.status === 'DRAFT' || a.status === 'PENDING'
+       a.status === 'PENDING'
     ).length;
 
     const completedAssessments = assessments.filter(a =>
@@ -738,22 +738,6 @@ export const VendorService = {
       return Math.ceil((today.getTime() - endDate.getTime()) / (1000 * 60 * 60 * 24));
     }
   },
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
   // ========== CALCULATE COMPLIANCE OVERVIEW ==========
   calculateComplianceOverview(suppliers: any[]) {
     const riskDistribution = {

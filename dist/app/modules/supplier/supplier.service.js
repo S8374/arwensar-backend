@@ -589,7 +589,7 @@ exports.SupplierService = {
             <p>You can now log in to your dashboard and start completing assessments.</p>
             
             <div style="text-align: center; margin: 30px 0;">
-              <a href="${config_1.config.APP.WEBSITE}/supplier/login" style="background-color: #007bff; color: white; padding: 12px 30px; text-decoration: none; border-radius: 5px; font-weight: bold;">
+              <a href="${config_1.config.APP.WEBSITE}/supplier/loginvendor" style="background-color: #007bff; color: white; padding: 12px 30px; text-decoration: none; border-radius: 5px; font-weight: bold;">
                 Go to Dashboard
               </a>
             </div>
