@@ -130,7 +130,6 @@ class UsageService {
     // ========== VALIDATE SUBSCRIPTION STATUS ==========
     validateSubscription(userId) {
         return __awaiter(this, void 0, void 0, function* () {
-            console.log("Hiting User Id", userId);
             const subscription = yield prisma_1.prisma.subscription.findUnique({
                 where: { userId },
                 include: { plan: true }
@@ -275,7 +274,10 @@ class UsageService {
                 throw new ApiError_1.default(http_status_1.default.NOT_FOUND, "No subscription found");
             }
             const usage = subscription.PlanLimitData || (yield this.getCurrentUsage(subscription.id));
-            const features = (0, getFeatures_1.getPlanFeatures)(subscription.plan);
+            const user = yield prisma_1.prisma.user.findUnique({
+                where: { id: userId }
+            });
+            const isAllFeaturesAccess = (user === null || user === void 0 ? void 0 : user.allFeaturesAccess) || false;
             // Get all usage values
             const limits = {
                 suppliersUsed: usage.suppliersUsed,
@@ -286,17 +288,8 @@ class UsageService {
                 reportsGeneratedUsed: usage.reportsGeneratedUsed,
                 notificationsSend: usage.notificationsSend,
             };
-            // Also include the plan features for reference
-            const planFeatures = {
-                supplierLimit: features.supplierLimit,
-                assessmentLimit: features.assessmentLimit,
-                messagesPerMonth: features.messagesPerMonth,
-                documentReviewsPerMonth: features.documentReviewsPerMonth,
-                reportCreate: features.reportCreate,
-                reportsGeneratedPerMonth: features.reportsGeneratedPerMonth,
-                notificationsSend: features.notificationsSend,
-            };
             return {
+                isAllFeaturesAccess,
                 limits,
                 subscription: {
                     id: subscription.id,

@@ -19,6 +19,7 @@ router.post("/plans", (0, auth_1.default)("ADMIN"), admin_controller_1.AdminCont
 router.patch("/plans/:planId", (0, auth_1.default)("ADMIN"), admin_controller_1.AdminController.updatePlan);
 router.delete("/plans/:planId", (0, auth_1.default)("ADMIN"), admin_controller_1.AdminController.deletePlan);
 router.get("/plans", admin_controller_1.AdminController.getAllPlans);
+router.get("/plans/admin", (0, auth_1.default)("ADMIN"), admin_controller_1.AdminController.getAllPlansAdmin);
 router.get("/plans/:planId", (0, auth_1.default)("ADMIN", "SUPPLIER", "VENDOR"), admin_controller_1.AdminController.getPlanById);
 // Assessments Management
 router.post("/assessments", (0, auth_1.default)("ADMIN"), (0, validateRequest_1.default)(admin_constant_1.createAssessmentSchema), admin_controller_1.AdminController.createAssessment);

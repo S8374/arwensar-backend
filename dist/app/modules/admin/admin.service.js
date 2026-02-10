@@ -342,7 +342,7 @@ exports.AdminService = {
     getAllPlans() {
         return __awaiter(this, void 0, void 0, function* () {
             return prisma_1.prisma.plan.findMany({
-                where: { isDeleted: false },
+                where: { isDeleted: false, isActive: true },
                 orderBy: { price: 'asc' }
             });
         });
@@ -351,6 +351,16 @@ exports.AdminService = {
         return __awaiter(this, void 0, void 0, function* () {
             return prisma_1.prisma.plan.findUnique({
                 where: { id: planId, isDeleted: false }
+            });
+        });
+    },
+    getAllPlansAdmin() {
+        return __awaiter(this, void 0, void 0, function* () {
+            return prisma_1.prisma.plan.findMany({
+                where: {
+                    isDeleted: false, // include active + inactive
+                },
+                orderBy: { price: "asc" },
             });
         });
     },

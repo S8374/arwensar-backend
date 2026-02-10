@@ -42,6 +42,7 @@ export interface VendorDashboardStats {
       assessmentTitle: string;
       submittedAt: Date;
       score: number | null;
+      status: string;
     }>;
   };
 

@@ -4,6 +4,8 @@ import { prisma } from "../../shared/prisma";
 import ApiError from "../../../error/ApiError";
 import httpStatus from "http-status";
 import { getPlanFeatures } from "../../helper/getFeatures";
+import { PlanFeatures } from "../../helper/planFeatures";
+
 export interface UsageCheckResult {
   canProceed: boolean;
   remaining?: number | null; 
@@ -311,6 +313,7 @@ class UsageService {
 
   // ========== GET REMAINING LIMITS ==========
   async getRemainingLimits(userId: string): Promise<{
+    isAllFeaturesAccess: boolean;
     limits: Record<string, number | null>;
     subscription: any;
   }> {
@@ -324,7 +327,10 @@ class UsageService {
     }
 
     const usage = subscription.PlanLimitData || await this.getCurrentUsage(subscription.id);
-
+    const user = await prisma.user.findUnique({
+      where: { id: userId }
+    })
+    const isAllFeaturesAccess = user?.allFeaturesAccess || false;
     // Get all usage values
     const limits = {
       suppliersUsed: usage.suppliersUsed,
@@ -335,7 +341,9 @@ class UsageService {
       reportsGeneratedUsed: usage.reportsGeneratedUsed,
       notificationsSend: usage.notificationsSend,
     };
+
     return {
+     isAllFeaturesAccess,
       limits,
       subscription: {
         id: subscription.id,

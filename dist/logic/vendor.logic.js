@@ -453,7 +453,8 @@ const calculateAssessmentStats = (assessments, suppliers) => {
             supplierName: ((_a = a.supplier) === null || _a === void 0 ? void 0 : _a.name) || 'Unknown',
             assessmentTitle: a.assessment.title,
             submittedAt: a.submittedAt || a.createdAt,
-            score: ((_b = a.score) === null || _b === void 0 ? void 0 : _b.toNumber()) || null
+            score: ((_b = a.score) === null || _b === void 0 ? void 0 : _b.toNumber()) || null,
+            status: a.status
         });
     });
     return {

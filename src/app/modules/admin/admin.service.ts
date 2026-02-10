@@ -453,7 +453,7 @@ export const AdminService = {
 
   async getAllPlans(): Promise<Plan[]> {
     return prisma.plan.findMany({
-      where: { isDeleted: false },
+      where: { isDeleted: false, isActive: true },
       orderBy: { price: 'asc' }
     });
   },
@@ -464,6 +464,16 @@ export const AdminService = {
     });
   },
 
+  async getAllPlansAdmin(): Promise<Plan[]> {
+    return prisma.plan.findMany({
+      where: {
+        isDeleted: false, // include active + inactive
+      },
+      orderBy: { price: "asc" },
+    });
+  }
+
+  ,
   // ========== ASSESSMENTS MANAGEMENT ==========
   async createAssessment(data: any): Promise<Assessment> {
     // Check if assessment with same examId exists

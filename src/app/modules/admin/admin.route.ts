@@ -39,6 +39,11 @@ router.get(
   "/plans",
   AdminController.getAllPlans
 );
+router.get(
+  "/plans/admin",
+  auth("ADMIN"),
+  AdminController.getAllPlansAdmin
+);
 
 router.get(
   "/plans/:planId",

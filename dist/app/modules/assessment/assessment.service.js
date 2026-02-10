@@ -450,10 +450,10 @@ exports.AssessmentService = {
                 score = question.maxScore;
             }
             else if (Answer === "YES" && !hasComment && hasEvidence) {
-                score = question.maxScore * 0.8;
+                score = question.maxScore;
             }
             else if (Answer === "YES" && hasComment && !hasEvidence) {
-                score = question.maxScore * 0.6;
+                score = question.maxScore;
             }
             else if (Answer === "YES" && !hasComment && !hasEvidence) {
                 score = question.maxScore * 0.5;

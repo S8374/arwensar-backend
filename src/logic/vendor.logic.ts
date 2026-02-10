@@ -570,7 +570,8 @@
         supplierName: a.supplier?.name || 'Unknown',
         assessmentTitle: a.assessment.title,
         submittedAt: a.submittedAt || a.createdAt,
-        score: a.score?.toNumber() || null
+        score: a.score?.toNumber() || null,
+        status: a.status
       }));
 
     return {

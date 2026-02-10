@@ -72,6 +72,15 @@ const getAllPlans = (0, catchAsync_1.default)((req, res) => __awaiter(void 0, vo
         data: plans
     });
 }));
+const getAllPlansAdmin = (0, catchAsync_1.default)((req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    const plans = yield admin_service_1.AdminService.getAllPlansAdmin();
+    (0, sendResponse_1.default)(res, {
+        statusCode: http_status_1.default.OK,
+        success: true,
+        message: "Plans retrieved successfully",
+        data: plans
+    });
+}));
 const getPlanById = (0, catchAsync_1.default)((req, res) => __awaiter(void 0, void 0, void 0, function* () {
     const { planId } = req.params;
     const plan = yield admin_service_1.AdminService.getPlanById(planId);
@@ -352,5 +361,6 @@ exports.AdminController = {
     permanentDeleteUser,
     deleteSupplier,
     getUserById,
-    getAssessmentById
+    getAssessmentById,
+    getAllPlansAdmin
 };

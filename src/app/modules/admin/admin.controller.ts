@@ -75,6 +75,16 @@ const getAllPlans = catchAsync(async (req: Request, res: Response) => {
     data: plans
   });
 });
+const getAllPlansAdmin = catchAsync(async (req: Request, res: Response) => {
+  const plans = await AdminService.getAllPlansAdmin();
+
+  sendResponse(res, {
+    statusCode: httpStatus.OK,
+    success: true,
+    message: "Plans retrieved successfully",
+    data: plans
+  });
+});
 
 const getPlanById = catchAsync(async (req: Request, res: Response) => {
   const { planId } = req.params;
@@ -399,5 +409,6 @@ export const AdminController = {
   permanentDeleteUser,
   deleteSupplier,
   getUserById,
-  getAssessmentById
+  getAssessmentById,
+  getAllPlansAdmin
 };
